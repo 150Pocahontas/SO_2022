@@ -59,7 +59,7 @@ void signIntHandler(){
 
 //The default action is to terminate the process
 void sigusr1SignalHandler(int signum){
-  int fd_fifo, res = 0, aux = 0;
+  int fd_fifo, res = 0;
   char buffer[MAX_LINE_SIZE];
 
 
@@ -88,7 +88,7 @@ void sigusr1SignalHandler(int signum){
 	write(fd_write_sc,EXIT,sizeOfExit);
 }
 
-void sig_excution_alarm_handler(int signum){
+void sigExecutionAlarmHandler(int signum){
   kill(getppid(),SIGUSR2);
   int fd_fifo, res;
   char buf[MAX_LINE_SIZE];
@@ -107,6 +107,40 @@ void sig_excution_alarm_handler(int signum){
   close(fd_fifo);
   free(child_pids[cur_task]);
   _exit(0);
+}
+
+void sigQuitInactivity(int signum){
+	int currentTask;
+	int fd_fifo;
+	int res;
+	char buffer[MAX_LINE_SIZE];
+	int status;
+
+	if((fd_fifo = open("pipe_task_inactivityTime",O_RDONLY)) == -1){ // abre extremo de leitura
+		perror("open-3");
+	}
+
+	res = read(fd_fifo,buffer,MAX_LINE_SIZE); // lê número da tarefa
+
+	buffer[res] = '\0';
+
+	currentTask = atoi(buffer); // transforma em um int
+
+	tasks[currentTask]->status = 3;
+
+	waitpid(tasks[currentTask]->pidT, &status, 0);
+
+	write(fd_write_sc,EXIT,sizeOfExit);
+
+	close(fd_fifo);
+
+	char *string = calloc(20,sizeof(char));
+	if(!fork()){
+		sprintf(string,"temp_out%d.txt",currentTask+1);
+		execlp("rm","rm",string,NULL); // 1 - > fd_sv_cl_write
+		_exit(0);
+	}
+	free(string);
 }
 
 
@@ -128,15 +162,6 @@ void execution_timeHandler(int signum){
 		perror("open-3");
 	}
 
-  void killProcessUSR1_handler(int signum){
-  	int i = 0;
-  	while(child_pids[cur_task][i]){
-  		kill(child_pids[cur_task][i++],SIGKILL);
-  	}
-  	free(child_pids[cur_task]);
-  	_exit(0);
-  }
-
   // gets task number
   res = read(fd_fifo,buffer,MAX_LINE_SIZE);
 
@@ -156,6 +181,15 @@ void execution_timeHandler(int signum){
   free(string);
   write(fd_write_sc,EXIT,sizeOfExit);
   close(fd_fifo);
+}
+
+void killProcessUSR1_handler(int signum){
+	int i = 0;
+	while(child_pids[cur_task][i]){
+		kill(child_pids[cur_task][i++],SIGKILL);
+	}
+	free(child_pids[cur_task]);
+	_exit(0);
 }
 
 void realloc_task(){
@@ -228,7 +262,84 @@ int exec_command(char* command){
   return exec_ret;
 }
 
+void executingTasks(){
+	char aux[MAX_LINE_SIZE];
+	int i;
+	for(i = 0; i < cur_task; i++){
+		if(tasks[i]->status == 1){
+			sprintf(aux,"#%d : %s\n",i+1,tasks[i]->task);
+			write(fd_write_sc,aux,strlen(aux));
+		}
+	}
+}
+
+int interpreter(char* line){
+ 	int r = 1;
+ 	char* string = strtok(line," ");
+ 	int pid;
+
+	if(strcmp(line,"stastus") == 0){
+		executingTasks();
+		write(fd_write_sc,EXIT,sizeOfExit);
+	}else if(strcmp(string,"proc-file")==0){
+			printf("hi");
+	}
+}
 
 int main(int argc, char** argv){
+	init_task();
+	cur_task = 0;
+	signal(SIGUSR1,sigusr1SignalHandler);
+	signal(SIGINT,signIntHandler);
+	signal(SIGUSR2,execution_timeHandler);
+	signal(SIGQUIT,sigQuitInactivity);
+	char buf[MAX_LINE_SIZE];
+	int bread;
+
+	if(argc == 3){
+		// open named pipe for reading
+		if((fd_read_cs = open("fifo_cs",O_RDONLY)) == -1){
+			perror("open");
+			return -1;
+		}else
+			printf("[DEBUG] opened fifo Client Server for [reading]\n");
+
+		// open named pipe for writing to handle asynchronous clients
+		if((fd_cs = open("fifo_cs", O_WRONLY)) == -1){
+			perror("open");
+			return -1;
+		}else
+			printf("[DEBUG] opened fifo Cliente Server for writing\n");
+
+		// open named pipe for writing
+		if((fd_write_sc = open("fifo_sc",O_WRONLY)) == -1){
+			perror("open");
+			return -1;
+		}else
+			printf("[DEBUG] opened fifo Server Client for [writing]\n");
+
+		// open named pipe for writing to handle asynchronous clients
+		if((fd_sc = open("fifo_sc", O_RDONLY)) == -1){
+			perror("open");
+			return -1;
+		}else
+			printf("[DEBUG] opened fifo server Client for reading\n");
+
+		// reads from pipe, execute
+		while((bread = read(fd_read_cs,buf,MAX_LINE_SIZE)) > 0){
+			buf[bread] = '\0';
+			interpreter(buf);
+			write(1,buf,bread);
+		  bzero(buf, MAX_LINE_SIZE * sizeof(char));
+		}
+		close(fd_read_cs);
+		close(fd_cs);
+		close(fd_sc);
+		close(fd_write_sc);
+	}else{
+		char* string = "[Wrong number of arguments]: The program must receive 2 arguments\n";
+		write(1,string,strlen(string));
+	}
+
   return 0;
 }

@@ -1,24 +1,39 @@
 ### Makefile ###
 
-CC = gcc
+CC = gcc -g
 
-CFLAGS = -Wall -g -c
+all : sdstore sdstored fifo
 
-all: server client
-
-server: bin/sdstored
-
-client: bin/sdstore
-
-bin/sdstored: obj/sdstored.o
-
-obj/sdstored.o: src/sdstored.c
-	$(CC) src/sdstored.c $(CFLAGS) -o bin/sdstored
-
-bin/sdstore: obj/sdstore.o
-
-obj/sdstore.o: src/sdstore.c
+sdstore: src/sdstore.c
 	$(CC) src/sdstore.c $(CFLAGS) -o bin/sdstore
 
+sdstored: sdstored.c
+	$(CC) src/sdstored.c $(CFLAGS) -o bin/sdstored
+
+fifo: mkfifo.c
+	$(CC) src/mkfifo.c $(CFLAGS) -o bin/mkfifo
+	./mkfifo
+
+compile:
+	$(CC) src/sdstored.c $(CFLAGS) -o bin/sdstored
+	$(CC) src/sdstore.c $(CFLAGS) -o bin/sdstore
+	$(CC) src/mkfifo.c $(CFLAGS) -o bin/mkfifo
+
+.PHONY: run
+run:
+	$(CC) src/sdstored.c $(CFLAGS) -o bin/sdstored
+	$(CC) src/sdstore.c  $(CFLAGS) -o bin/sdstore
+	./sdstored
+
+.PHONY: clean
 clean:
-	rm -r -f obj/* tmp/* bin/*
+	rm -f sdstored
+	rm -f sdstore
+	rm -f mkfifo
+	rm -f pipe*
+	rm -f fifo_sc
+	rm -f fifo_cs
+
+.PHONY: exit
+exit:
+	pkill -f sdstored

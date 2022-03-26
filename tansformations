@@ -1,0 +1,7 @@
+nop 1
+bcompress 1
+bdecompress 1
+gcompress 1
+gdecompress 1
+encrypt 1
+decrypt 1

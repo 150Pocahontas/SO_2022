@@ -11,3 +11,4 @@
 #define EXIT "//exit"
 #define sizeOfExit 6
 #define MAX_LINE_SIZE 4096
+#define path "../SO2122/bin"
