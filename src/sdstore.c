@@ -24,16 +24,18 @@ int main(int argc, char** argv){
   bzero(buf, MAX_LINE_SIZE * sizeof(char));
   //child processo
   if((pid = fork()) == 0){
-      if(argc == 2){
-        write(fd_write_cs,argv[1],strlen(argv[1]));
-      }else if(argc > 2){
-        //for (int i = 1; i<argc ; i++)
-        write(fd_write_cs,argv,strlen(argv));
+    if(argc == 1){
+      write(fd_write_cs,"info",4);
+    }else if(argc == 2){
+      write(fd_write_cs,argv[1],strlen(argv[1]));
+    }else if(argc > 2){
+      for (int i = 1; i<argc;i++){
+        write(fd_write_cs,argv[i],strlen(argv[i]));
+        write(fd_write_cs," ",strlen(" "));
       }
-
+    }
     _exit(0);
-    //father process -> writes to bash
-  }else{
+  }else{ //father process -> writes to bash what
     while((res = read(fd_read_sc,buf,MAX_LINE_SIZE)) > 0){ // escrever tudo que vem do pipe sv->cl no terminal
       if(strcmp(buf+res-sizeOfExit,EXIT) == 0) {
         write(1,buf,res-sizeOfExit);

@@ -1,39 +1,33 @@
 ### Makefile ###
 
-CC = gcc -g
+CC = gcc
+CFLAGS = -Wall -g -std=c99
+INCLUDE = -I src/include
 
-all : sdstore sdstored fifo
+all : fifo server client
 
-sdstore: src/sdstore.c
-	$(CC) src/sdstore.c $(CFLAGS) -o bin/sdstore
+fifo: src/mkfifo.c
+	gcc -g src/mkfifo.c -o bin/mkfifo
+	./bin/mkfifo
 
-sdstored: sdstored.c
-	$(CC) src/sdstored.c $(CFLAGS) -o bin/sdstored
+server: bin/sdstored
 
-fifo: mkfifo.c
-	$(CC) src/mkfifo.c $(CFLAGS) -o bin/mkfifo
-	./mkfifo
+client: bin/sdstore
 
-compile:
-	$(CC) src/sdstored.c $(CFLAGS) -o bin/sdstored
-	$(CC) src/sdstore.c $(CFLAGS) -o bin/sdstore
-	$(CC) src/mkfifo.c $(CFLAGS) -o bin/mkfifo
+bin/sdstored: obj/sdstored.o
+	$(CC) $(CFLAGS) $(INCLUDE) obj/sdstored.o -o bin/sdstored
 
-.PHONY: run
-run:
-	$(CC) src/sdstored.c $(CFLAGS) -o bin/sdstored
-	$(CC) src/sdstore.c  $(CFLAGS) -o bin/sdstore
-	./sdstored
+obj/sdstored.o: src/sdstored.c
+	$(CC) $(CFLAGS) $(INCLUDE) -c src/sdstored.c -o obj/sdstored.o
 
-.PHONY: clean
+
+bin/sdstore: obj/sdstore.o
+	$(CC) $(CFLAGS) $(INCLUDE) obj/sdstore.o -o bin/sdstore
+
+obj/sdstore.o: src/sdstore.c
+	$(CC) $(CFLAGS) $(INCLUDE) -c src/sdstore.c -o obj/sdstore.o
+
+$(shell mkdir -p obj bin)
+
 clean:
-	rm -f sdstored
-	rm -f sdstore
-	rm -f mkfifo
-	rm -f pipe*
-	rm -f fifo_sc
-	rm -f fifo_cs
-
-.PHONY: exit
-exit:
-	pkill -f sdstored
+	rm -R obj bin

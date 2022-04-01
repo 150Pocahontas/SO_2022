@@ -10,6 +10,8 @@ typedef struct struct_task{
 int fd_cs, fd_read_cs, fd_sc, fd_write_sc;
 int **child_pids;
 int size_max = 20;
+int max[7];
+int running[7];
 
 Task* tasks;
 int cur_task;
@@ -24,19 +26,11 @@ void signIntHandler(){
     execlp("rm","rm","pipe_task_done",NULL);
   }
   if(fork() == 0){
-    execlp("rm","rm","pipe_task_executionTime",NULL);
+    execlp("rm","rm","fifo_cs",NULL);
     _exit(0);
   }
   if(fork() == 0){
-    execlp("rm","rm","pipe_task_inactivityTime",NULL);
-    _exit(0);
-  }
-  if(fork() == 0){
-    execlp("rm","rm","fifo-cl-sv",NULL);
-    _exit(0);
-  }
-  if(fork() == 0){
-    execlp("rm","rm","fifo-sv-cl",NULL);
+    execlp("rm","rm","fifo_sc",NULL);
     _exit(0);
   }
   for(int i = 0; i<3;i++){
@@ -61,7 +55,6 @@ void signIntHandler(){
 void sigusr1SignalHandler(int signum){
   int fd_fifo, res = 0;
   char buffer[MAX_LINE_SIZE];
-
 
   if((fd_fifo = open("pipe_task_done",O_RDONLY)) == -1)
     perror("open-2");
@@ -88,61 +81,6 @@ void sigusr1SignalHandler(int signum){
 	write(fd_write_sc,EXIT,sizeOfExit);
 }
 
-void sigExecutionAlarmHandler(int signum){
-  kill(getppid(),SIGUSR2);
-  int fd_fifo, res;
-  char buf[MAX_LINE_SIZE];
-
-  // child waits til father does´t create fifo,
-  while ((fd_fifo = open("pipe_task_executionTime",O_WRONLY)) == -1);
-
-  res = sprintf(buf,"%d",cur_task);
-  write(fd_fifo,buf,res);
-
-  int i = 0;
-  while (child_pids[cur_task][i]){
-    kill(child_pids[cur_task][i++],SIGKILL);
-  }
-
-  close(fd_fifo);
-  free(child_pids[cur_task]);
-  _exit(0);
-}
-
-void sigQuitInactivity(int signum){
-	int currentTask;
-	int fd_fifo;
-	int res;
-	char buffer[MAX_LINE_SIZE];
-	int status;
-
-	if((fd_fifo = open("pipe_task_inactivityTime",O_RDONLY)) == -1){ // abre extremo de leitura
-		perror("open-3");
-	}
-
-	res = read(fd_fifo,buffer,MAX_LINE_SIZE); // lê número da tarefa
-
-	buffer[res] = '\0';
-
-	currentTask = atoi(buffer); // transforma em um int
-
-	tasks[currentTask]->status = 3;
-
-	waitpid(tasks[currentTask]->pidT, &status, 0);
-
-	write(fd_write_sc,EXIT,sizeOfExit);
-
-	close(fd_fifo);
-
-	char *string = calloc(20,sizeof(char));
-	if(!fork()){
-		sprintf(string,"temp_out%d.txt",currentTask+1);
-		execlp("rm","rm",string,NULL); // 1 - > fd_sv_cl_write
-		_exit(0);
-	}
-	free(string);
-}
-
 
 void printOutput(int task){
   // invalid task or concluded
@@ -153,35 +91,6 @@ void printOutput(int task){
   }
 }
 
-// fathers handler, to open comunication fifo with child, so he can pass the task
-void execution_timeHandler(int signum){
-  int currentTask, fd_fifo, res, status;
-  char buffer[MAX_LINE_SIZE];
-
-  if((fd_fifo = open("pipe_task_executionTime",O_RDONLY)) == -1){
-		perror("open-3");
-	}
-
-  // gets task number
-  res = read(fd_fifo,buffer,MAX_LINE_SIZE);
-
-  buffer[res] = '\0';
-	currentTask = atoi(buffer);
-	tasks[currentTask]->status = 4; //max execution_timeHandler
-
-  waitpid(tasks[currentTask]->pidT,&status,0);
-
-  char *string = calloc(20,sizeof(char));
-
-  if(!fork()){
-    sprintf(string,"temp_out%d.txt",currentTask+1);
-		execlp("rm","rm",string,NULL); // 1 - > fd_sv_cl_write
-		_exit(0);
-  }
-  free(string);
-  write(fd_write_sc,EXIT,sizeOfExit);
-  close(fd_fifo);
-}
 
 void killProcessUSR1_handler(int signum){
 	int i = 0;
@@ -273,16 +182,38 @@ void executingTasks(){
 	}
 }
 
+void info(){
+	write(fd_write_sc,"./sdstore status\n",17);
+	write(fd_write_sc,"./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2 ...",103);
+}
+
+void process(char* file1, char* file2, char** transformations){
+	write(fd_write_sc,"processing\n",11);
+
+}
+
 int interpreter(char* line){
  	int r = 1;
  	char* string = strtok(line," ");
  	int pid;
 
-	if(strcmp(line,"stastus") == 0){
+	if(strcmp(line,"info") == 0){
+		info();
+		write(fd_write_sc,EXIT,sizeOfExit);
+	}else	if(strcmp(line,"stastus") == 0){
 		executingTasks();
 		write(fd_write_sc,EXIT,sizeOfExit);
-	}else if(strcmp(string,"proc-file")==0){
-			printf("hi");
+	}else if(strcmp(string,"proc-file")== 0){
+		write(fd_write_sc,"pending\n",8);
+		char* file1 = strtok(NULL," ");
+		char* file2 = strtok(NULL," ");
+		char** transformations = malloc(sizeof(char**));
+		int t;
+		for(t = 0; strtok(NULL," ") ; t++){
+			transformations[t] == strtok(NULL," ");
+			//printf("%s\n", transformations[t]);
+		}
+		process(file1,file2,transformations);
 	}
 }
 
@@ -291,12 +222,15 @@ int main(int argc, char** argv){
 	cur_task = 0;
 	signal(SIGUSR1,sigusr1SignalHandler);
 	signal(SIGINT,signIntHandler);
-	signal(SIGUSR2,execution_timeHandler);
-	signal(SIGQUIT,sigQuitInactivity);
 	char buf[MAX_LINE_SIZE];
 	int bread;
 
 	if(argc == 3){
+
+		if(open(argv[1],O_RDONLY) == -1){
+			perror("Primeiro argumentos");
+			return -1;
+		}
 		// open named pipe for reading
 		if((fd_read_cs = open("fifo_cs",O_RDONLY)) == -1){
 			perror("open");
@@ -328,8 +262,9 @@ int main(int argc, char** argv){
 		// reads from pipe, execute
 		while((bread = read(fd_read_cs,buf,MAX_LINE_SIZE)) > 0){
 			buf[bread] = '\0';
-			interpreter(buf);
 			write(1,buf,bread);
+			write(1,"\n",strlen("\n"));
+			interpreter(buf);
 		  bzero(buf, MAX_LINE_SIZE * sizeof(char));
 		}
 		close(fd_read_cs);
