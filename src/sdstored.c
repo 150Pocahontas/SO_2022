@@ -1,5 +1,5 @@
 //Server
-#include "include/sdstored.h"
+#include "include/sdstore.h"
 
 typedef struct struct_task{
 	char *task;
@@ -10,12 +10,13 @@ typedef struct struct_task{
 int fd_cs, fd_read_cs, fd_sc, fd_write_sc;
 int **child_pids;
 int size_max = 20;
-int max[7];
+int max_inst[7];
 int running[7];
 
 Task* tasks;
 int cur_task;
 int resp_task; //responsible for an execution
+char* path;
 
 void signIntHandler(){
   close(fd_cs);
@@ -34,7 +35,7 @@ void signIntHandler(){
     _exit(0);
   }
   for(int i = 0; i<3;i++){
-    wait(0L);
+    wait(0);
   }
   for(int i = 0; i<size_max;i++){
     //printf("pid:    %d\n",tasks[i]->pidT );
@@ -51,7 +52,6 @@ void signIntHandler(){
   _exit(0);
 }
 
-//The default action is to terminate the process
 void sigusr1SignalHandler(int signum){
   int fd_fifo, res = 0;
   char buffer[MAX_LINE_SIZE];
@@ -66,7 +66,7 @@ void sigusr1SignalHandler(int signum){
   int t = atoi(buffer);
 
   if (tasks[t]){
-    tasks[t] -> status = 2; //concluded
+    tasks[t] -> status = 2;
     char *string = calloc(20,sizeof(char));
 
 		if(!fork()){
@@ -75,22 +75,18 @@ void sigusr1SignalHandler(int signum){
 		}
 		free(string);
 	}
-	else { // realloc do array
+	else {
 		printf("[DEBUG] shouldn´t come in here\n");
 	}
 	write(fd_write_sc,EXIT,sizeOfExit);
 }
 
-
 void printOutput(int task){
   // invalid task or concluded
   if(task < 0 || !tasks[task] || tasks[task] -> status != 2){
     write(fd_write_sc, "Invalid Task\n",14);
-  }else{
-    //
   }
 }
-
 
 void killProcessUSR1_handler(int signum){
 	int i = 0;
@@ -183,37 +179,94 @@ void executingTasks(){
 }
 
 void info(){
-	write(fd_write_sc,"./sdstore status\n",17);
-	write(fd_write_sc,"./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2 ...",103);
+	write(fd_write_sc,"./sdstore status\n",18);
+	write(fd_write_sc,"./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2 ...\n",105);
 }
 
-void process(char* file1, char* file2, char** transformations){
-	write(fd_write_sc,"processing\n",11);
+void process(char* input, char* output, char** transformations,int numT){
+	write (fd_write_sc,"processing\n",12);
 
+	int fdin = dup(0);
+  int fdout = dup(1);
+
+	int fd_in = open(input,O_RDONLY);
+	int fd_out = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
+
+	dup2(fd_in,0);
+	dup2(fd_out,1);
+
+	close(fd_in);
+	close(fd_out);
+
+	for(int i= 0; i < numT; i++){
+		char* aux = malloc(sizeof(char*));
+		strcpy(aux,path);
+		if(aux[strlen(aux)-1]!= '/') strcat(aux,"/");
+		strcat(aux,transformations[i]);
+		printf("%s\n", aux);
+		execl(aux,transformations[i],NULL);
+		perror("Reached return");
+	}
+
+	dup2(fdout,0);
+  dup2(fdin,1);
+
+	write(fd_write_sc, "concluded ",10);
+	write(fd_write_sc,EXIT,sizeOfExit);
 }
 
-int interpreter(char* line){
- 	int r = 1;
+void interpreter(char* line){
+ 	//int r = 1;
  	char* string = strtok(line," ");
- 	int pid;
+ 	//int pid;
 
 	if(strcmp(line,"info") == 0){
 		info();
+		write(1,EXIT,sizeOfExit);
 		write(fd_write_sc,EXIT,sizeOfExit);
-	}else	if(strcmp(line,"stastus") == 0){
+	}else	if(strcmp(line,"status") == 0){
 		executingTasks();
 		write(fd_write_sc,EXIT,sizeOfExit);
 	}else if(strcmp(string,"proc-file")== 0){
 		write(fd_write_sc,"pending\n",8);
-		char* file1 = strtok(NULL," ");
-		char* file2 = strtok(NULL," ");
-		char** transformations = malloc(sizeof(char**));
+		char* file = strtok(NULL," ");
+		char* outputFolder = strtok(NULL," ");
+		char** transformations = malloc(sizeof(char*));
 		int t;
-		for(t = 0; strtok(NULL," ") ; t++){
-			transformations[t] == strtok(NULL," ");
-			//printf("%s\n", transformations[t]);
+		char* aux = malloc(sizeof(char*));
+		for(t = 0; (aux = strtok(NULL," ")); t++){
+			transformations[t] = malloc(sizeof(char));
+			strcpy(transformations[t],aux);
 		}
-		process(file1,file2,transformations);
+		process(file,outputFolder,transformations,t);
+	}else {
+		write(fd_write_sc,"Unkown operator\n",16);
+		write(fd_write_sc,EXIT,sizeOfExit);
+	}
+}
+
+void read_conf(int fd_config){
+	char buf[15];
+
+	while(readln(fd_config,buf,15) > 0){
+		char* string = strtok(buf," ");
+
+		if(strcmp(string,"nop") == 0){
+			max_inst[0] = atoi(strtok(NULL," "));
+		}else if(strcmp(string,"bcompress")== 0){
+			max_inst[1] = atoi(strtok(NULL," "));
+		}else if(strcmp(string,"bdecompress")== 0){
+			max_inst[2] = atoi(strtok(NULL," "));
+		}else if(strcmp(string,"gcompress")== 0){
+			max_inst[3] = atoi(strtok(NULL," "));
+		}else if(strcmp(string,"gdecompress")== 0){
+			max_inst[4] = atoi(strtok(NULL," "));
+		}else if(strcmp(string,"encrypt")== 0){
+			max_inst[5] = atoi(strtok(NULL," "));
+		}else if(strcmp(string,"decrypt")== 0){
+			max_inst[6] = atoi(strtok(NULL," "));
+		}
+		bzero(buf,15);
 	}
 }
 
@@ -222,59 +275,57 @@ int main(int argc, char** argv){
 	cur_task = 0;
 	signal(SIGUSR1,sigusr1SignalHandler);
 	signal(SIGINT,signIntHandler);
-	char buf[MAX_LINE_SIZE];
+	char* buf = malloc(MAX_LINE_SIZE*sizeof(char*));
 	int bread;
+	int fd_config;
+	path = argv[2];
 
-	if(argc == 3){
-
-		if(open(argv[1],O_RDONLY) == -1){
-			perror("Primeiro argumentos");
-			return -1;
-		}
-		// open named pipe for reading
-		if((fd_read_cs = open("fifo_cs",O_RDONLY)) == -1){
-			perror("open");
-			return -1;
-		}else
-			printf("[DEBUG] opened fifo Client Server for [reading]\n");
-
-		// open named pipe for writing to handle asynchronous clients
-		if((fd_cs = open("fifo_cs", O_WRONLY)) == -1){
-			perror("open");
-			return -1;
-		}else
-			printf("[DEBUG] opened fifo Cliente Server for writing\n");
-
-		// open named pipe for writing
-		if((fd_write_sc = open("fifo_sc",O_WRONLY)) == -1){
-			perror("open");
-			return -1;
-		}else
-			printf("[DEBUG] opened fifo Server Client for [writing]\n");
-
-		// open named pipe for writing to handle asynchronous clients
-		if((fd_sc = open("fifo_sc", O_RDONLY)) == -1){
-			perror("open");
-			return -1;
-		}else
-			printf("[DEBUG] opened fifo server Client for reading\n");
-
-		// reads from pipe, execute
-		while((bread = read(fd_read_cs,buf,MAX_LINE_SIZE)) > 0){
-			buf[bread] = '\0';
-			write(1,buf,bread);
-			write(1,"\n",strlen("\n"));
-			interpreter(buf);
-		  bzero(buf, MAX_LINE_SIZE * sizeof(char));
-		}
-		close(fd_read_cs);
-		close(fd_cs);
-		close(fd_sc);
-		close(fd_write_sc);
-	}else{
-		char* string = "[Wrong number of arguments]: The program must receive 2 arguments\n";
-		write(1,string,strlen(string));
+	if(argc < 3){
+		write(1,"[Wrong number of arguments]: The program must receive 2 arguments\n",67);
+		return -1;
 	}
 
-  return 0;
+	if((fd_config = open(argv[1],O_RDONLY)) == -1){
+		perror("Primeiro argumento");
+		return -1;
+	}
+
+	read_conf(fd_config);
+	close(fd_config);
+
+	if((fd_read_cs = open("fifo_cs",O_RDONLY)) == -1){
+		perror("open");
+		return -1;
+	}else	printf("[DEBUG] opened fifo Client Server for [reading]\n");
+
+	if((fd_cs = open("fifo_cs", O_WRONLY)) == -1){
+		perror("open");
+		return -1;
+	}else printf("[DEBUG] opened fifo Cliente Server for writing\n");
+
+	if((fd_write_sc = open("fifo_sc",O_WRONLY)) == -1){
+		perror("open");
+		return -1;
+	}else
+		printf("[DEBUG] opened fifo Server Client for [writing]\n");
+
+	if((fd_sc = open("fifo_sc", O_RDONLY)) == -1){
+		perror("open");
+		return -1;
+	}else printf("[DEBUG] opened fifo server Client for reading\n");
+
+	while((bread = read(fd_read_cs,buf,MAX_LINE_SIZE)) > 0){
+		buf[bread] = '\0';
+		write(1,buf,bread);
+		write(1,"\n",strlen("\n"));
+		interpreter(buf);
+	  bzero(buf, MAX_LINE_SIZE * sizeof(char));
+	}
+
+	close(fd_read_cs);
+	close(fd_cs);
+	close(fd_sc);
+	close(fd_write_sc);
+
+	return 0;
 }

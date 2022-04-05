@@ -7,8 +7,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include "readln.h"
 
 #define EXIT "//exit"
 #define sizeOfExit 6
-#define MAX_LINE_SIZE 4096
-#define path "../SO2122/bin"
+#define MAX_LINE_SIZE 256

@@ -7,7 +7,7 @@ gcompress: gcompress.o
 
 gcompress.o: gcompress.c
 
-gdecompress: gdecompress.o
+gdecompress: gdecompress.
 
 gdecompress.o: gdecompress.c
 
