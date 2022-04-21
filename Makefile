@@ -4,7 +4,7 @@ CC = gcc
 CFLAGS = -Wall -g -fno-stack-protector
 INCLUDE = -I src/include
 
-all : fifo trasnformations server client
+all : fifo server client
 
 fifo: src/mkfifo.c
 	gcc -g src/mkfifo.c -o bin/fifo

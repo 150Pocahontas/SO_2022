@@ -120,7 +120,7 @@ void task_ended(){
 
   while((fd_fifo = open("pipe_task_done",O_WRONLY)) == -1);
   res = sprintf(buf,"%d",cur_task);
-  write(fd_fifo,buf,res); // child comunicates father his task
+  write(fd_fifo,buf,res);
   close(fd_fifo);
 }
 
@@ -163,7 +163,7 @@ int exec_command(char* command){
   }
 
   exec_args[i] = NULL;
-  exec_ret = execvp(exec_args[0], exec_args);
+  exec_ret = execvp(exec_args[0],exec_args);
   return exec_ret;
 }
 
@@ -186,33 +186,59 @@ void info(){
 void process(char* input, char* output, char** transformations,int numT){
 	write (fd_write_sc,"processing\n",12);
 
+	int filds[2];
+	int pid[numT], status[numT];
+
 	int fdin = dup(0);
   int fdout = dup(1);
 
-	int fd_in = open(input,O_RDONLY);
-	int fd_out = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
-
-	dup2(fd_in,0);
-	dup2(fd_out,1);
-
-	close(fd_in);
-	close(fd_out);
+	filds[0] = open(input,O_RDONLY);
+	filds[1] = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
 
 	for(int i= 0; i < numT; i++){
+
 		char* aux = malloc(sizeof(char*));
 		strcpy(aux,path);
 		if(aux[strlen(aux)-1]!= '/') strcat(aux,"/");
 		strcat(aux,transformations[i]);
-		printf("%s\n", aux);
-		execl(aux,transformations[i],NULL);
-		perror("Reached return");
+
+		if(fork() == 0 && i == 0){ // produtor
+			close(filds[0]);
+			dup2(filds[1],1);
+	    close(filds[1]);
+	    execl(aux,transformations[i],NULL);
+	    _exit(pid[i]);
+		}else if(fork() == 0 && i == numT-1)  { //consumidor
+			close(filds[1]);
+	    dup2(filds[0],0);
+	    close(filds[0]);
+	    execl(aux,transformations[i],NULL);
+	    _exit(pid[i]);
+		}else if(fork() == 0){ //consumidor e depois produtor
+	    dup2(filds[0],0);
+	    close(filds[0]);
+			dup2(filds[1],1);
+	    close(filds[1]);
+	    execl(aux,transformations[i],NULL);
+	    _exit(pid[i]);
+		}else{
+			if (i != numT - 1) close(filds[1]);
+			if(i != 0 ) close(filds[0]);
+			wait(&status[i]);
+			if (WIFEXITED(status[i])) {
+        printf("[PAI]: filho terminou com %d\n", WEXITSTATUS(status[i]));
+			}
+		}
 	}
+
+	//fflush(filds[1]);
 
 	dup2(fdout,0);
   dup2(fdin,1);
 
 	write(fd_write_sc, "concluded ",10);
 	write(fd_write_sc,EXIT,sizeOfExit);
+
 }
 
 void interpreter(char* line){

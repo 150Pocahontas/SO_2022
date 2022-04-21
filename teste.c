@@ -20,6 +20,6 @@ int main(int argc, char** argv){
   execl(argv[1],argv[2],NULL);
   perror("erro");
 
-
+  //./bcompress | ./nop | ./encrypt
   return 0;
 }
