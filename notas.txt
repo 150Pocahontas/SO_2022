@@ -1,0 +1,9 @@
+mkfifo: Operation not supported
+
+./bin/sdstore proc-file samples/file-a.pdf outputs/output nop
+./bin/sdstored etc/sdstored.conf bin/sdstore-transformations
+
+cd ~ && sudo umount /mnt/c
+sudo mount -t drvfs C:\\ /mnt/c -o metadata
+cd $(wslpath C:\\) && cd $(wslpath $(cmd.exe /c "echo %USERPROFILE%") | tr -d '\r')
+strace -o test.strace -f mkfifo ./test

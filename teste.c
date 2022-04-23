@@ -10,6 +10,7 @@
 int main(int argc, char** argv){
 
   //execl("bin/sdstore-transformations/bcompress","bcompress",NULL);
+  //execl("bin/sdstore-transformations/nop","nop",NULL);
 
   int fd_in = open(argv[3],O_RDONLY);
   int fd_out = open(argv[4],O_CREAT | O_TRUNC | O_WRONLY,0666);

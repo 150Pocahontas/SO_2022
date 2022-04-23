@@ -189,62 +189,72 @@ void process(char* input, char* output, char** transformations,int numT){
 	int filds[2];
 	int pid[numT], status[numT];
 
+	pipe(filds);
+	/*if(pipe(filds) == -1){
+		perror("Pipe not created: ");
+		return -1;
+	}*/
+
 	int fdin = dup(0);
   int fdout = dup(1);
 
-	filds[0] = open(input,O_RDONLY);
-	filds[1] = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
+	int fd_in = open(input,O_RDONLY);
+	int fd_out = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
 
-	for(int i= 0; i < numT; i++){
 
+
+	for(int i = 0; i < numT; i++){
 		char* aux = malloc(sizeof(char*));
 		strcpy(aux,path);
 		if(aux[strlen(aux)-1]!= '/') strcat(aux,"/");
 		strcat(aux,transformations[i]);
 
-		if(fork() == 0 && i == 0){ // produtor
-			close(filds[0]);
-			dup2(filds[1],1);
-	    close(filds[1]);
-	    execl(aux,transformations[i],NULL);
-	    _exit(pid[i]);
-		}else if(fork() == 0 && i == numT-1)  { //consumidor
-			close(filds[1]);
-	    dup2(filds[0],0);
-	    close(filds[0]);
-	    execl(aux,transformations[i],NULL);
-	    _exit(pid[i]);
-		}else if(fork() == 0){ //consumidor e depois produtor
-	    dup2(filds[0],0);
-	    close(filds[0]);
-			dup2(filds[1],1);
-	    close(filds[1]);
-	    execl(aux,transformations[i],NULL);
-	    _exit(pid[i]);
+		if(fork() == 0){
+			dup2(fd_in,0); // read
+		  dup2(fd_out,1); //write
+
+			if(i== 0 && i == numT-1){
+				execl(aux,transformations[i],NULL);
+		    _exit(pid[i]);
+			}else if(i == 0){ // produtor
+				close(filds[0]);
+				dup2(filds[1],1);
+		    close(filds[1]);
+		    execl(aux,transformations[i],NULL);
+		    _exit(pid[i]);
+			} else if(i == numT-1)  { //consumidor
+				close(filds[1]);
+		    dup2(filds[0],0);
+		    close(filds[0]);
+		    execl(aux,transformations[i],NULL);
+		    _exit(pid[i]);
+			}else{ //consumidor e depois produtor
+		    dup2(filds[0],0);
+		    close(filds[0]);
+				dup2(filds[1],1);
+		    close(filds[1]);
+		    execl(aux,transformations[i],NULL);
+				//perror("Erro:");
+		    _exit(pid[i]);
+			}
 		}else{
 			if (i != numT - 1) close(filds[1]);
 			if(i != 0 ) close(filds[0]);
+			dup2(fdout,0);
+		  dup2(fdin,1);
 			wait(&status[i]);
 			if (WIFEXITED(status[i])) {
-        printf("[PAI]: filho terminou com %d\n", WEXITSTATUS(status[i]));
+				printf("[PAI]: filho terminou com %d\n", WEXITSTATUS(status[i]));
 			}
 		}
 	}
-
-	//fflush(filds[1]);
-
-	dup2(fdout,0);
-  dup2(fdin,1);
-
+	fflush(stdin);
 	write(fd_write_sc, "concluded ",10);
 	write(fd_write_sc,EXIT,sizeOfExit);
-
 }
 
 void interpreter(char* line){
- 	//int r = 1;
  	char* string = strtok(line," ");
- 	//int pid;
 
 	if(strcmp(line,"info") == 0){
 		info();
@@ -299,8 +309,10 @@ void read_conf(int fd_config){
 int main(int argc, char** argv){
 	init_task();
 	cur_task = 0;
+
 	signal(SIGUSR1,sigusr1SignalHandler);
 	signal(SIGINT,signIntHandler);
+
 	char* buf = malloc(MAX_LINE_SIZE*sizeof(char*));
 	int bread;
 	int fd_config;
