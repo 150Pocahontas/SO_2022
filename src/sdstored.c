@@ -9,16 +9,18 @@ typedef struct struct_task{
 
 int fd_cs, fd_read_cs, fd_sc, fd_write_sc;
 int **child_pids;
-int size_max = 20;
+int size_max = 5;
 int max_inst[7];
 int running[7];
+
+//Task* priority_0, priority_1, priority_2, priority_3,priority_4,priority_5;
 
 Task* tasks;
 int cur_task;
 int resp_task; //responsible for an execution
 char* path;
 
-void signIntHandler(){
+void sign_Int_handler(){
   close(fd_cs);
   close(fd_read_cs);
   close(fd_write_sc);
@@ -39,7 +41,7 @@ void signIntHandler(){
   }
   for(int i = 0; i<size_max;i++){
     //printf("pid:    %d\n",tasks[i]->pidT );
-    //printf("status: %d\n",tasks[i]->status );
+    //printf("status: %d\n",tasks[i]->status);
     //printf("task: %s\n",tasks[i]->task);
     //printf("start offset: %d\n",tasks[i]->o_start );
     //printf("end offset: %d\n",tasks[i]->o_size );
@@ -74,8 +76,7 @@ void sigusr1SignalHandler(int signum){
 			_exit(0);
 		}
 		free(string);
-	}
-	else {
+	}else {
 		printf("[DEBUG] shouldn´t come in here\n");
 	}
 	write(fd_write_sc,EXIT,sizeOfExit);
@@ -119,6 +120,7 @@ void task_ended(){
   char buf[MAX_LINE_SIZE];
 
   while((fd_fifo = open("pipe_task_done",O_WRONLY)) == -1);
+
   res = sprintf(buf,"%d",cur_task);
   write(fd_fifo,buf,res);
   close(fd_fifo);
@@ -186,22 +188,19 @@ void info(){
 void process(char* input, char* output, char** transformations,int numT){
 	write (fd_write_sc,"processing\n",12);
 
-	int filds[2];
 	int pid[numT], status[numT];
+	int filds[2];
 
-	pipe(filds);
-	/*if(pipe(filds) == -1){
+	if(pipe(filds) == -1){
 		perror("Pipe not created: ");
-		return -1;
-	}*/
+		return;
+	}
 
 	int fdin = dup(0);
   int fdout = dup(1);
 
 	int fd_in = open(input,O_RDONLY);
 	int fd_out = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
-
-
 
 	for(int i = 0; i < numT; i++){
 		char* aux = malloc(sizeof(char*));
@@ -210,8 +209,12 @@ void process(char* input, char* output, char** transformations,int numT){
 		strcat(aux,transformations[i]);
 
 		if(fork() == 0){
+
 			dup2(fd_in,0); // read
 		  dup2(fd_out,1); //write
+
+			close(fd_in);
+			close(fd_out);
 
 			if(i== 0 && i == numT-1){
 				execl(aux,transformations[i],NULL);
@@ -234,7 +237,6 @@ void process(char* input, char* output, char** transformations,int numT){
 				dup2(filds[1],1);
 		    close(filds[1]);
 		    execl(aux,transformations[i],NULL);
-				//perror("Erro:");
 		    _exit(pid[i]);
 			}
 		}else{
@@ -248,12 +250,12 @@ void process(char* input, char* output, char** transformations,int numT){
 			}
 		}
 	}
-	fflush(stdin);
-	write(fd_write_sc, "concluded ",10);
+	write(fd_write_sc, "concluded\n ",10);
 	write(fd_write_sc,EXIT,sizeOfExit);
 }
 
 void interpreter(char* line){
+	int pid, status;
  	char* string = strtok(line," ");
 
 	if(strcmp(line,"info") == 0){
@@ -264,27 +266,50 @@ void interpreter(char* line){
 		executingTasks();
 		write(fd_write_sc,EXIT,sizeOfExit);
 	}else if(strcmp(string,"proc-file")== 0){
-		write(fd_write_sc,"pending\n",8);
-		char* file = strtok(NULL," ");
-		char* outputFolder = strtok(NULL," ");
-		char** transformations = malloc(sizeof(char*));
-		int t;
-		char* aux = malloc(sizeof(char*));
-		for(t = 0; (aux = strtok(NULL," ")); t++){
-			transformations[t] = malloc(sizeof(char));
-			strcpy(transformations[t],aux);
+		if((pid = fork()) == 0){
+			write(fd_write_sc,"pending\n",8);
+			char* file = strtok(NULL," ");
+			char* outputFolder = strtok(NULL," ");
+			char** transformations = malloc(sizeof(char*));
+			int t;
+			char* aux = malloc(sizeof(char*));
+			for(t = 0; (aux = strtok(NULL," ")); t++){
+				transformations[t] = malloc(sizeof(char));
+				strcpy(transformations[t],aux);
+			}
+			process(file,outputFolder,transformations,t);
+			kill(getppid(),SIGUSR1);
+			task_ended();
+			_exit(pid);
+		}else{
+			if(tasks[cur_task]){
+				tasks[cur_task]->pidT = pid;
+				tasks[cur_task]->status = 1;
+				tasks[cur_task]->task = calloc(strlen(string),sizeof(char));
+				strcpy(tasks[cur_task++]->task,string);
+			}else{
+				realloc_task();
+				tasks[cur_task]->pidT = pid;
+				tasks[cur_task]->status = 1;
+				tasks[cur_task]->task = calloc(strlen(string),sizeof(char));
+				strcpy(tasks[cur_task++]->task,string);
+			}
+			wait(&status);
+			if (WIFEXITED(status)) {
+				printf("[PAI]: filho terminou com %d\n", WEXITSTATUS(status));
+			}
 		}
-		process(file,outputFolder,transformations,t);
-	}else {
+	}else{
 		write(fd_write_sc,"Unkown operator\n",16);
 		write(fd_write_sc,EXIT,sizeOfExit);
 	}
 }
 
-void read_conf(int fd_config){
+int read_conf(int fd_config){
 	char buf[15];
+	int c;
 
-	while(readln(fd_config,buf,15) > 0){
+	for(c=0;readln(fd_config,buf,15) > 0;c++){
 		char* string = strtok(buf," ");
 
 		if(strcmp(string,"nop") == 0){
@@ -301,9 +326,20 @@ void read_conf(int fd_config){
 			max_inst[5] = atoi(strtok(NULL," "));
 		}else if(strcmp(string,"decrypt")== 0){
 			max_inst[6] = atoi(strtok(NULL," "));
+		}else{
+			write(1,"Ficheiro de configuração incorreto\n",37);
+			return -1;
 		}
-		bzero(buf,15);
 	}
+
+	bzero(buf,15);
+
+	if(c!=7){
+		write(1,"Ficheiro de configuração incorreto\n",37);
+		return -1;
+	}
+
+	return 0;
 }
 
 int main(int argc, char** argv){
@@ -311,7 +347,7 @@ int main(int argc, char** argv){
 	cur_task = 0;
 
 	signal(SIGUSR1,sigusr1SignalHandler);
-	signal(SIGINT,signIntHandler);
+	signal(SIGINT,sign_Int_handler);
 
 	char* buf = malloc(MAX_LINE_SIZE*sizeof(char*));
 	int bread;
@@ -327,9 +363,9 @@ int main(int argc, char** argv){
 		perror("Primeiro argumento");
 		return -1;
 	}
-
-	read_conf(fd_config);
 	close(fd_config);
+
+	if(read_conf(fd_config) ==-1) return -1;
 
 	if((fd_read_cs = open("fifo_cs",O_RDONLY)) == -1){
 		perror("open");
@@ -344,8 +380,7 @@ int main(int argc, char** argv){
 	if((fd_write_sc = open("fifo_sc",O_WRONLY)) == -1){
 		perror("open");
 		return -1;
-	}else
-		printf("[DEBUG] opened fifo Server Client for [writing]\n");
+	}else printf("[DEBUG] opened fifo Server Client for [writing]\n");
 
 	if((fd_sc = open("fifo_sc", O_RDONLY)) == -1){
 		perror("open");
@@ -364,6 +399,5 @@ int main(int argc, char** argv){
 	close(fd_cs);
 	close(fd_sc);
 	close(fd_write_sc);
-
 	return 0;
 }

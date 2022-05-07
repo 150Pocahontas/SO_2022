@@ -2,21 +2,16 @@
 #include "include/sdstore.h"
 
 int main(int argc, char** argv){
-  //int res;
-  //char buf[MAX_LINE_SIZE];
+
   int pid, res, fd_write_cs, fd_read_sc;
   char buf[MAX_LINE_SIZE];
 
   if((fd_write_cs = open("fifo_cs",O_WRONLY)) == -1){
     perror("open"); return -1;
-  }else{
-    printf("[DEBUG] fifo client Server for writing opened\n");
   }
 
   if((fd_read_sc = open("fifo_sc",O_RDONLY)) == -1){
     perror("open"); return -1;
-  }else{
-    printf("[DEBUG] fifo client Server for reading opened\n");
   }
 
   bzero(buf, MAX_LINE_SIZE * sizeof(char));
@@ -30,10 +25,10 @@ int main(int argc, char** argv){
       for (int i = 1; i<argc;i++){
         write(fd_write_cs,argv[i],strlen(argv[i]));
         write(fd_write_cs," ",strlen(" "));
-        //printf("%s\n",argv[i]);
-        //printf("%d\n",i );
       }
     }
+    close(fd_write_cs);
+    close(fd_read_sc);
     _exit(0);
   }else{
     while((res = read(fd_read_sc,buf,MAX_LINE_SIZE)) > 0){
@@ -47,7 +42,5 @@ int main(int argc, char** argv){
       }
     }
   }
-  close(fd_write_cs);
-  close(fd_read_sc);
   return 0;
 }
