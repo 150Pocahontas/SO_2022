@@ -2,21 +2,20 @@
 #include "include/sdstore.h"
 
 int main(int argc, char** argv){
-
+  printf("oi Im new\n");
   int pid, res, fd_write_cs, fd_read_sc;
   char buf[MAX_LINE_SIZE];
 
-  if((fd_write_cs = open("fifo_cs",O_WRONLY)) == -1){
-    perror("open"); return -1;
-  }
-
-  if((fd_read_sc = open("fifo_sc",O_RDONLY)) == -1){
-    perror("open"); return -1;
-  }
 
   bzero(buf, MAX_LINE_SIZE * sizeof(char));
 
   if((pid = fork()) == 0){
+
+    if((fd_write_cs = open("fifo_cs",O_WRONLY)) == -1){
+      perror("open");
+      return -1;
+    }
+
     if(argc == 1){
       write(fd_write_cs,"info",strlen("info"));
     }else if(argc == 2){
@@ -28,9 +27,14 @@ int main(int argc, char** argv){
       }
     }
     close(fd_write_cs);
-    close(fd_read_sc);
     _exit(0);
   }else{
+
+    if((fd_read_sc = open("fifo_sc",O_RDONLY)) == -1){
+      perror("open");
+      return -1;
+    }
+
     while((res = read(fd_read_sc,buf,MAX_LINE_SIZE)) > 0){
       if(strcmp(buf+res-sizeOfExit,EXIT) == 0) {
         write(1,buf,res-sizeOfExit);
@@ -41,6 +45,8 @@ int main(int argc, char** argv){
         bzero(buf, MAX_LINE_SIZE * sizeof(char));
       }
     }
+    kill(pid,SIGKILL);
+    close(fd_read_sc);
   }
   return 0;
 }

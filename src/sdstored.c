@@ -13,9 +13,14 @@ int size_max = 5;
 int max_inst[7];
 int running[7];
 
-//Task* priority_0, priority_1, priority_2, priority_3,priority_4,priority_5;
-
 Task* tasks;
+Task* priority_0;
+Task* priority_1;
+Task* priority_2;
+Task* priority_3;
+Task* priority_4;
+Task* priority_5;
+
 int cur_task;
 int resp_task; //responsible for an execution
 char* path;
@@ -107,8 +112,9 @@ void realloc_task(){
 }
 
 void init_task(){
+	write(1,"task iniciada\n",14);
+	child_pids = calloc(size_max,sizeof(int*));
   tasks = calloc(size_max,sizeof(tasks));
-  child_pids = calloc(size_max,sizeof(int*));
   for(int i = 0;i<size_max;i++)
     tasks[i] = calloc(1,sizeof(struct struct_task));
 }
@@ -137,7 +143,7 @@ int end_task(int task){
   kill(pid,SIGUSR1);
   waitpid(pid,&status,0);
   if (WIFEXITED(status))
-    printf("Task finished with exit stauts %d\n",WEXITSTATUS(status));
+    printf("Task finished with exit status %d\n",WEXITSTATUS(status));
   tasks[task-1]->status = 5; //killed
 
   char* string = calloc(20,sizeof(char));
@@ -148,25 +154,6 @@ int end_task(int task){
 	}
 	free(string);
   return 1;
-}
-
-int exec_command(char* command){
-  char* exec_args[20];
-  char* string;
-  int exec_ret = 0;
-  int i = 0;
-
-  string = strtok(command, " ");
-
-  while (string != NULL) {
-    exec_args[i] = string;
-    string = strtok(NULL," ");
-    i++;
-  }
-
-  exec_args[i] = NULL;
-  exec_ret = execvp(exec_args[0],exec_args);
-  return exec_ret;
 }
 
 void executingTasks(){
@@ -185,8 +172,28 @@ void info(){
 	write(fd_write_sc,"./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2 ...\n",105);
 }
 
+char* read_bytes(char* file){
+
+	char* buffer = malloc(sizeof(char));
+
+	int fd = open("samples/file-a2",O_RDONLY);
+
+	ssize_t bytes_read = 0;
+	int c = 0;
+
+	while((bytes_read = read(fd,buffer,1))>0)
+    c += bytes_read;
+
+  free(buffer);
+
+	char* str = malloc(sizeof(char));
+	sprintf(str,"%d", c);
+
+	return str;
+}
+
 void process(char* input, char* output, char** transformations,int numT){
-	write (fd_write_sc,"processing\n",12);
+	write(fd_write_sc,"processing\n",12);
 
 	int pid[numT], status[numT];
 	int filds[2];
@@ -202,20 +209,18 @@ void process(char* input, char* output, char** transformations,int numT){
 	int fd_in = open(input,O_RDONLY);
 	int fd_out = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
 
+	dup2(fd_in,0); // read
+	dup2(fd_out,1); //write
+
+	close(fd_in);
+	close(fd_out);
+
 	for(int i = 0; i < numT; i++){
-		char* aux = malloc(sizeof(char*));
+		char* aux = malloc(sizeof(char));
 		strcpy(aux,path);
 		if(aux[strlen(aux)-1]!= '/') strcat(aux,"/");
 		strcat(aux,transformations[i]);
-
 		if(fork() == 0){
-
-			dup2(fd_in,0); // read
-		  dup2(fd_out,1); //write
-
-			close(fd_in);
-			close(fd_out);
-
 			if(i== 0 && i == numT-1){
 				execl(aux,transformations[i],NULL);
 		    _exit(pid[i]);
@@ -225,7 +230,7 @@ void process(char* input, char* output, char** transformations,int numT){
 		    close(filds[1]);
 		    execl(aux,transformations[i],NULL);
 		    _exit(pid[i]);
-			} else if(i == numT-1)  { //consumidor
+			}else if(i == numT-1)  { //consumidor
 				close(filds[1]);
 		    dup2(filds[0],0);
 		    close(filds[0]);
@@ -246,11 +251,26 @@ void process(char* input, char* output, char** transformations,int numT){
 		  dup2(fdin,1);
 			wait(&status[i]);
 			if (WIFEXITED(status[i])) {
-				printf("[PAI]: filho terminou com %d\n", WEXITSTATUS(status[i]));
+				printf("\nfilho terminou com %d\n", WEXITSTATUS(status[i]));
 			}
 		}
+		//free(aux);
 	}
-	write(fd_write_sc, "concluded\n ",10);
+
+	//(bytes-input: 1024, bytes-output: 2048)
+	char msg[50] = "concluded (bytes-input: ";
+	char* b = malloc(sizeof(char));
+	b = read_bytes(input);
+	strcat(msg,b);
+	free(b);
+	strcat(msg,", bytes-output:");
+	b = read_bytes(output);
+	strcat(msg,b);
+	free(b);
+	strcat(msg,")\n");
+	write(1,msg,strlen(msg));
+
+	write(fd_write_sc,msg,strlen(msg));
 	write(fd_write_sc,EXIT,sizeOfExit);
 }
 
@@ -327,7 +347,7 @@ int read_conf(int fd_config){
 		}else if(strcmp(string,"decrypt")== 0){
 			max_inst[6] = atoi(strtok(NULL," "));
 		}else{
-			write(1,"Ficheiro de configuração incorreto\n",37);
+			write(1,"[1]Ficheiro de configuração incorreto\n",40);
 			return -1;
 		}
 	}
@@ -335,7 +355,7 @@ int read_conf(int fd_config){
 	bzero(buf,15);
 
 	if(c!=7){
-		write(1,"Ficheiro de configuração incorreto\n",37);
+		write(1,"[2]Ficheiro de configuração incorreto\n",40);
 		return -1;
 	}
 
@@ -343,7 +363,9 @@ int read_conf(int fd_config){
 }
 
 int main(int argc, char** argv){
+
 	init_task();
+
 	cur_task = 0;
 
 	signal(SIGUSR1,sigusr1SignalHandler);
@@ -363,9 +385,9 @@ int main(int argc, char** argv){
 		perror("Primeiro argumento");
 		return -1;
 	}
-	close(fd_config);
 
-	if(read_conf(fd_config) ==-1) return -1;
+	if(read_conf(fd_config) == -1) return -1;
+	close(fd_config);
 
 	if((fd_read_cs = open("fifo_cs",O_RDONLY)) == -1){
 		perror("open");

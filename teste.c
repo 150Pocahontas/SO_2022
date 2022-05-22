@@ -7,20 +7,38 @@
 #include <string.h>
 #include <sys/wait.h>
 
+#define BUFF_SIZE 4096
+
+char readBuffer[7];
+int pos_atual = 0;
+int pos_final = 0;
+
+ssize_t readchar(int fd, char *c){
+  if (pos_final == pos_atual){
+    pos_final = read(fd, readBuffer, 7);
+    if (pos_final > 0)
+      pos_atual = 0;
+    else return 0;
+  }
+  *c = readBuffer[pos_atual++];
+  return 1;
+}
+
+ssize_t readln(int fd, char* line, size_t size){
+
+  int counter = 0;
+
+  while(readchar(fd,&line[counter]) > 0 && counter < size){
+    counter++;
+    if(line[counter-1] == '\n')
+      return counter;
+  }
+  return counter;
+}
+
 int main(int argc, char** argv){
 
-  //execl("bin/sdstore-transformations/bcompress","bcompress",NULL);
-  //execl("bin/sdstore-transformations/nop","nop",NULL);
-
-  int fd_in = open(argv[3],O_RDONLY);
-  int fd_out = open(argv[4],O_CREAT | O_TRUNC | O_WRONLY,0666);
-
-  dup2(fd_in,0); // read
-  dup2(fd_out,1); //write
-
-  execl(argv[1],argv[2],NULL);
-  perror("erro");
-
-  //./bcompress | ./nop | ./encrypt
+  char* s = "ola\n";
+  printf("%ld\n",strlen(s));
   return 0;
 }
