@@ -2,7 +2,7 @@
 #include "include/sdstore.h"
 
 typedef struct struct_task{
-	char *task;
+	char* task;
 	pid_t pidT;
 	int status;
 }*Task;
@@ -12,6 +12,7 @@ int **child_pids;
 int size_max = 5;
 int max_inst[7];
 int running[7];
+int len = 0;
 
 Task* tasks;
 Task* priority_0;
@@ -24,6 +25,7 @@ Task* priority_5;
 int cur_task;
 int resp_task; //responsible for an execution
 char* path;
+
 
 void sign_Int_handler(){
   close(fd_cs);
@@ -49,8 +51,6 @@ void sign_Int_handler(){
     //printf("pid:    %d\n",tasks[i]->pidT );
     //printf("status: %d\n",tasks[i]->status);
     //printf("task: %s\n",tasks[i]->task);
-    //printf("start offset: %d\n",tasks[i]->o_start );
-    //printf("end offset: %d\n",tasks[i]->o_size );
     if(tasks[i]->task) free(tasks[i]->task);
     free(tasks[i]);
     free(child_pids[i]);
@@ -76,7 +76,6 @@ void sigusr1SignalHandler(int signum){
   if (tasks[t]){
     tasks[t] -> status = 2;
     char *string = calloc(20,sizeof(char));
-		printf("oiii\n");
 		printf("%s\n",string);
 		if(!fork()){
 			execlp("rm","rm",string,NULL);
@@ -86,14 +85,7 @@ void sigusr1SignalHandler(int signum){
 	}else {
 		printf("[DEBUG] shouldn´t come in here\n");
 	}
-	write(fd_write_sc,EXIT,sizeOfExit);
-}
-
-void printOutput(int task){
-  // invalid task or concluded
-  if(task < 0 || !tasks[task] || tasks[task] -> status != 2){
-    write(fd_write_sc, "Invalid Task\n",13);
-  }
+	write(fd_write_sc,EXIT,strlen(EXIT));
 }
 
 void killProcessUSR1_handler(int signum){
@@ -105,20 +97,19 @@ void killProcessUSR1_handler(int signum){
 	_exit(0);
 }
 
+void init_task(){
+	child_pids = calloc(size_max,sizeof(int*));
+  tasks = calloc(size_max,sizeof(tasks));
+  for(int i = 0;i<size_max;i++)
+    tasks[i] = calloc(1,sizeof(struct struct_task));
+}
+
 void realloc_task(){
   tasks = realloc(tasks,2*size_max*sizeof(Task));
   child_pids = realloc(tasks,2*size_max*sizeof(int*));
   for(int i = size_max;i<2*size_max;i++)
     tasks[i]  = calloc(1,sizeof(struct struct_task));
   size_max = 2*size_max;
-}
-
-void init_task(){
-	write(1,"Task iniciada\n",14);
-	child_pids = calloc(size_max,sizeof(int*));
-  tasks = calloc(size_max,sizeof(tasks));
-  for(int i = 0;i<size_max;i++)
-    tasks[i] = calloc(1,sizeof(struct struct_task));
 }
 
 void task_ended(){
@@ -148,30 +139,48 @@ int end_task(int task){
     printf("Task finished with exit status %d\n",WEXITSTATUS(status));
   tasks[task-1]->status = 5; //killed
 
-  char* string = calloc(20,sizeof(char));
-  if(!fork()){
-    sprintf(string,"temp_out%d.txt",task);
-		execlp("rm","rm",string,NULL); // 1 - > fd_write_sc
-		_exit(0);
-	}
-	free(string);
   return 1;
+}
+
+void transfState(char transf[11], int i){
+	char msg[35] = "transf ";
+	strcat(msg,transf);
+	strcat(msg, " ");
+	char* str = malloc(sizeof(char));
+	sprintf(str,"%d", running[i]);
+	strcat(msg,str);
+	strcat(msg,"/");
+	sprintf(str,"%d", max_inst[i]);
+	strcat(msg,str);
+	free(str);
+	strcat(msg," (running/max)");
+	strcat(msg,"\n");
+	write(fd_write_sc,msg,strlen(msg));
 }
 
 void executingTasks(){
 	char aux[MAX_LINE_SIZE];
 	int i;
-	for(i = 0; i < cur_task; i++){
-		if(tasks[i]->status == 1){
-			sprintf(aux,"#%d : %s\n",i+1,tasks[i]->task);
-			write(fd_write_sc,aux,strlen(aux));
+	if(cur_task == 0){
+		len = strlen("No tasks running\n");
+		write(fd_write_sc,"No tasks running\n",len);
+	}
+	else{
+		for(i = 0; i < cur_task; i++){
+			if(tasks[i]->status == 1){
+				sprintf(aux,"#%d : %s\n",i+1,tasks[i]->task);
+			}
 		}
 	}
-}
 
-void info(){
-	write(fd_write_sc,"./sdstore status\n",17);
-	write(fd_write_sc,"./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2 ...\n",104);
+	transfState("nop",0);
+	transfState("bcompress",1);
+	transfState("bdecompress",2);
+	transfState("gcompress",3);
+	transfState("gdecompress",4);
+	transfState("encrypt",5);
+	transfState("decrypt",6);
+	write(fd_write_sc,EXIT,strlen(EXIT));
 }
 
 char* read_bytes(char* file){
@@ -195,7 +204,8 @@ char* read_bytes(char* file){
 }
 
 void process(char* input, char* output, char** transformations,int numT){
-	write(fd_write_sc,"processing\n",11);
+	len = strlen("processing\n");
+	write(fd_write_sc,"processing\n",len);
 
 	int pid[numT], status[numT];
 	int filds[2];
@@ -265,35 +275,53 @@ void process(char* input, char* output, char** transformations,int numT){
 	}
 
 	//(bytes-input: 1024, bytes-output: 2048)
-	char msg[50] = "concluded (bytes-input: ";
+	char msg[60] = "concluded (bytes-input: ";
 	char* b = malloc(sizeof(char));
 	b = read_bytes(input);
 	strcat(msg,b);
 	free(b);
-	strcat(msg,", bytes-output:");
+	strcat(msg,", bytes-output: ");
 	b = read_bytes(output);
 	strcat(msg,b);
 	free(b);
 	strcat(msg,")\n");
 
 	write(fd_write_sc,msg,strlen(msg));
-	write(fd_write_sc,EXIT,sizeOfExit);
+	write(fd_write_sc,EXIT,strlen(EXIT));
 }
 
 void interpreter(char* line){
 	int pid, status;
- 	char* string = strtok(line," ");
 
+	char string[strlen(line)];
+	strcpy(string,line);
+ 	strtok(line," ");
 	if(strcmp(line,"info") == 0){
-		info();
-		write(1,EXIT,sizeOfExit);
-		write(fd_write_sc,EXIT,sizeOfExit);
+		if((pid = fork())==0){
+			len = strlen("./sdstore status\n");
+			write(fd_write_sc,"./sdstore status\n",len);
+			len = strlen("./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2...\n");
+			write(fd_write_sc,"./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2...\n",len);
+			write(fd_write_sc,EXIT,strlen(EXIT));
+		}else{
+			pid_t pid_filho = wait(&status);
+			if (WIFEXITED(status)) {
+				printf("[PAI]: filho %d terminou com %d\n",pid_filho, WEXITSTATUS(status));
+			}
+		}
 	}else	if(strcmp(line,"status") == 0){
-		executingTasks();
-		write(fd_write_sc,EXIT,sizeOfExit);
-	}else if(strcmp(string,"proc-file")== 0){
+		if((pid = fork())==0){
+			executingTasks();
+		}else{
+			pid_t pid_filho = wait(&status);
+			if (WIFEXITED(status)) {
+				printf("[PAI]: filho %d terminou com %d\n",pid_filho, WEXITSTATUS(status));
+			}
+		}
+	}else if(strcmp(line,"proc-file")== 0){
 		if((pid = fork()) == 0){
-			write(fd_write_sc,"pending\n",8);
+			len = strlen("pending\n");
+			write(fd_write_sc,"pending\n",len);
 			char* file = strtok(NULL," ");
 			char* outputFolder = strtok(NULL," ");
 			char** transformations = malloc(sizeof(char*));
@@ -308,11 +336,12 @@ void interpreter(char* line){
 			task_ended();
 			_exit(pid);
 		}else{
+			printf("New Task\n");
 			if(tasks[cur_task]){
 				tasks[cur_task]->pidT = pid;
-				tasks[cur_task]->status = 1;
+				tasks[cur_task]->status = 1; // runing
 				tasks[cur_task]->task = calloc(strlen(string),sizeof(char));
-				strcpy(tasks[cur_task++]->task,string);
+				strcpy(tasks[cur_task++]->task,string); //adiciona a nova tarefa e concatena o cur_task
 			}else{
 				realloc_task();
 				tasks[cur_task]->pidT = pid;
@@ -320,14 +349,15 @@ void interpreter(char* line){
 				tasks[cur_task]->task = calloc(strlen(string),sizeof(char));
 				strcpy(tasks[cur_task++]->task,string);
 			}
-			wait(&status);
+			pid_t pid_filho = wait(&status);
 			if (WIFEXITED(status)) {
-				printf("[PAI]: filho terminou com %d\n", WEXITSTATUS(status));
+				printf("[PAI]: filho %d terminou com %d\n",pid_filho, WEXITSTATUS(status));
 			}
 		}
 	}else{
-		write(fd_write_sc,"Unkown operator\n",16);
-		write(fd_write_sc,EXIT,sizeOfExit);
+		len = strlen("Unkown operator\n");
+		write(fd_write_sc,"Unkown operator\n",len);
+		write(fd_write_sc,EXIT,strlen(EXIT));
 	}
 }
 

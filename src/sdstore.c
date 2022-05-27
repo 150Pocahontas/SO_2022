@@ -27,19 +27,14 @@ int main(int argc, char** argv){
     close(fd_write_cs);
     _exit(0);
   }else{
-
     if((fd_read_sc = open("fifo_sc",O_RDONLY)) == -1){
       perror("open");
       return -1;
-    }else{
-      printf("[DEBUG] opened fifo Client for reading\n");
     }
+    while((res = readln(fd_read_sc,buf,MAX_LINE_SIZE)) > 0){
+      if(strcmp(buf,EXIT) == 0) {
+        if(argc > 2) if(read(fd_read_sc,buf,MAX_LINE_SIZE));
 
-    while((res = read(fd_read_sc,buf,MAX_LINE_SIZE)) > 0){
-      if(strcmp(buf+res-sizeOfExit,EXIT) == 0) {
-        write(1,buf,res-sizeOfExit);
-        read(fd_read_sc,buf,MAX_LINE_SIZE);
-        bzero(buf, MAX_LINE_SIZE * sizeof(char));
         close(fd_read_sc);
         return 1;
       }else{

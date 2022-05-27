@@ -24,7 +24,7 @@ obj/sdstored.o: src/sdstored.c
 	$(CC) $(CFLAGS) $(INCLUDE) -c src/sdstored.c -o obj/sdstored.o
 
 bin/sdstore: obj/sdstore.o
-	$(CC) $(CFLAGS) $(INCLUDE) obj/sdstore.o -o bin/sdstore
+	$(CC) $(CFLAGS) $(INCLUDE) src/readln.c obj/sdstore.o -o bin/sdstore
 
 obj/sdstore.o: src/sdstore.c
 	$(CC) $(CFLAGS) $(INCLUDE) -c src/sdstore.c -o obj/sdstore.o
