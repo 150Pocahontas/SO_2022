@@ -2,17 +2,38 @@
 #include "include/sdstore.h"
 
 int main(int argc, char** argv){
-  int pid, res, fd_write_cs, fd_read_sc;
+  int status, res, fd_write_server, fd_write_cs, fd_read_sc;
   char buf[MAX_LINE_SIZE];
 
   bzero(buf, MAX_LINE_SIZE * sizeof(char));
 
-  if((pid = fork()) == 0){
+  if(fork() == 0){
 
-    if((fd_write_cs = open("fifo_cs",O_WRONLY)) == -1){
+    //abre o fifo para escrita
+    if((fd_write_server= open("fifo_server",O_WRONLY)) == -1){
       perror("open");
       return -1;
-    }
+    }else printf("[DEBUG] opened fifo Server for [writing]\n");
+
+    write(fd_write_server,"ola",strlen("ola"));
+    char* pid_str = malloc(sizeof(char));
+    sprintf(pid_str,"%d",getpid());
+
+    if (mkfifo(pid_str,0666) == -1){
+  		perror("mkfifo");
+  	}
+
+    printf("%s\n",pid_str);
+    write(fd_write_server,pid_str,strlen(pid_str));
+    close(fd_write_server);
+
+    //abre file para escrita
+    if((fd_write_cs = open(pid_str,O_WRONLY)) == -1){
+      perror("open");
+      return -1;
+    }else	printf("[DEBUG] opened fifo %s for [writing]\n",buf);
+
+    free(pid_str);
 
     if(argc == 1){
       write(fd_write_cs,"info",strlen("info"));
@@ -27,15 +48,22 @@ int main(int argc, char** argv){
     close(fd_write_cs);
     _exit(0);
   }else{
-    if((fd_read_sc = open("fifo_sc",O_RDONLY)) == -1){
+
+    pid_t terminated_pid = wait(&status);
+
+    char* pid_str = malloc(sizeof(char));
+    sprintf(pid_str,"%d",terminated_pid);
+
+    if((fd_read_sc = open(pid_str,O_RDONLY)) == -1){
       perror("open");
       return -1;
-    }
+    }else printf("[DEBUG] opened fifo %s for [reading]\n",buf);
+
     while((res = readln(fd_read_sc,buf,MAX_LINE_SIZE)) > 0){
       if(strcmp(buf,EXIT) == 0) {
         if(argc > 2) if(read(fd_read_sc,buf,MAX_LINE_SIZE));
-
         close(fd_read_sc);
+        execlp("rm","rm",pid_str,NULL);
         return 1;
       }else{
         write(1,buf,res);

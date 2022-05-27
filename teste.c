@@ -37,8 +37,10 @@ ssize_t readln(int fd, char* line, size_t size){
 }
 
 int main(int argc, char** argv){
-
-  char s[8] = "ola";
-  printf("%ld\n",strlen(s));
+  printf("\npid filho %d\n", getpid());
+  char* str = malloc(sizeof(char));
+  sprintf(str,"%d",getpid());
+  write(1,str,strlen(str));
+  printf("\n");
   return 0;
 }

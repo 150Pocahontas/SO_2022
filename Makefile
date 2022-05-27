@@ -4,11 +4,7 @@ CC = gcc
 CFLAGS = -Wall -g -fno-stack-protector
 INCLUDE = -I src/include
 
-all : fifo server client transformations move
-
-fifo: src/mkfifo.c
-	gcc -g src/mkfifo.c -o bin/fifo
-	./bin/fifo
+all : server client transformations move
 
 transformations:
 	make -C SDStore-transf

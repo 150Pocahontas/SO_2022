@@ -7,7 +7,7 @@ typedef struct struct_task{
 	int status;
 }*Task;
 
-int fd_cs, fd_read_cs, fd_sc, fd_write_sc;
+int fd_read_server, fd_read_cs, fd_write_sc;
 int **child_pids;
 int size_max = 5;
 int max_inst[7];
@@ -28,22 +28,12 @@ char* path;
 
 
 void sign_Int_handler(){
-  close(fd_cs);
-  close(fd_read_cs);
-  close(fd_write_sc);
-  close(fd_sc);
+  close(fd_read_server);
   if(fork() == 0){
-    execlp("rm","rm","pipe_task_done",NULL);
-		_exit(0);
-  }
-  if(fork() == 0){
-    execlp("rm","rm","fifo_cs",NULL);
+    execlp("rm","rm","fifo_server",NULL);
     _exit(0);
   }
-  if(fork() == 0){
-    execlp("rm","rm","fifo_sc",NULL);
-    _exit(0);
-  }
+
   for(int i = 0; i<3;i++){
     wait(0);
   }
@@ -169,6 +159,7 @@ void executingTasks(){
 		for(i = 0; i < cur_task; i++){
 			if(tasks[i]->status == 1){
 				sprintf(aux,"#%d : %s\n",i+1,tasks[i]->task);
+				write(fd_write_sc,aux,strlen(aux));
 			}
 		}
 	}
@@ -180,6 +171,7 @@ void executingTasks(){
 	transfState("gdecompress",4);
 	transfState("encrypt",5);
 	transfState("decrypt",6);
+
 	write(fd_write_sc,EXIT,strlen(EXIT));
 }
 
@@ -291,6 +283,7 @@ void process(char* input, char* output, char** transformations,int numT){
 }
 
 void interpreter(char* line){
+	printf("%s\n",line );
 	int pid, status;
 
 	char string[strlen(line)];
@@ -331,6 +324,7 @@ void interpreter(char* line){
 				transformations[t] = malloc(sizeof(char));
 				strcpy(transformations[t],aux);
 			}
+			sleep(10);
 			process(file,outputFolder,transformations,t);
 			kill(getppid(),SIGUSR1);
 			task_ended();
@@ -400,15 +394,11 @@ int read_conf(int fd_config){
 
 int main(int argc, char** argv){
 
-	init_task();
-
-	cur_task = 0;
-
 	signal(SIGUSR1,sigusr1SignalHandler);
 	signal(SIGINT,sign_Int_handler);
 
 	char* buf = malloc(MAX_LINE_SIZE*sizeof(char*));
-	int bread;
+	int bread, status;
 	int fd_config;
 	path = argv[2];
 
@@ -425,37 +415,48 @@ int main(int argc, char** argv){
 	if(read_conf(fd_config) == -1) return -1;
 	close(fd_config);
 
-	if((fd_read_cs = open("fifo_cs",O_RDONLY)) == -1){
-		perror("open");
-		return -1;
-	}else	printf("[DEBUG] opened fifo Client Server for [reading]\n");
+	init_task();
+	cur_task = 0;
 
-	if((fd_cs = open("fifo_cs", O_WRONLY)) == -1){
-		perror("open");
-		return -1;
-	}else printf("[DEBUG] opened fifo Cliente Server for writing\n");
-
-	if((fd_write_sc = open("fifo_sc",O_WRONLY)) == -1){
-		perror("open");
-		return -1;
-	}else printf("[DEBUG] opened fifo Server Client for [writing]\n");
-
-	if((fd_sc = open("fifo_sc", O_RDONLY)) == -1){
-		perror("open");
-		return -1;
-	}else printf("[DEBUG] opened fifo server Client for reading\n");
-
-	while((bread = read(fd_read_cs,buf,MAX_LINE_SIZE)) > 0){
-		buf[bread] = '\0';
-		write(1,buf,bread);
-		write(1,"\n",strlen("\n"));
-		interpreter(buf);
-	  bzero(buf, MAX_LINE_SIZE * sizeof(char));
+	if (mkfifo("fifo_server",0666) == -1){
+		perror("mkfifo");
 	}
 
-	close(fd_read_cs);
-	close(fd_cs);
-	close(fd_sc);
-	close(fd_write_sc);
+	//Abre o fifo para leitura
+	if((fd_read_server = open("fifo_server",O_RDONLY)) == -1){
+		perror("open");
+		return -1;
+	}else	printf("[DEBUG] opened fifo Server for [reading]\n");
+
+	while((bread = read(fd_read_cs,buf,MAX_LINE_SIZE)) > 0){
+		printf("ola\n");printf("%s\n",buf );
+		if(fork() == 0){
+
+			if((fd_read_cs = open(buf,O_RDONLY)) == -1){
+	      perror("open");
+	      return -1;
+	    }else printf("[DEBUG] opened fifo %s for [reading]\n",buf);
+
+			if((fd_write_sc = open(buf,O_WRONLY)) == -1){
+	      perror("open");
+	      return -1;
+	    }else printf("[DEBUG] opened fifo %s for [writing]\n",buf);
+
+			bzero(buf, MAX_LINE_SIZE * sizeof(char));
+
+			while((bread = read(fd_read_cs,buf,MAX_LINE_SIZE)) > 0)
+				interpreter(buf);
+
+			close(fd_read_cs);
+			close(fd_write_sc);
+			_exit(0);
+		}else{
+			pid_t pid_filho = wait(&status);
+			if (WIFEXITED(status))
+				printf("[PAI]: filho %d terminou com %d\n",pid_filho, WEXITSTATUS(status));
+		}
+	  bzero(buf, MAX_LINE_SIZE * sizeof(char));
+	}
+	close(fd_read_server);
 	return 0;
 }

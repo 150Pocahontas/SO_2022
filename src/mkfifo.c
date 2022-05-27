@@ -3,7 +3,7 @@
 
 int main(){
 
-	if (mkfifo("fifo_cs",0666) == -1){
+	if (mkfifo("fifo_",0666) == -1){
 		perror("mkfifo");
 	}
 	if (mkfifo("fifo_sc",0666) == -1){
