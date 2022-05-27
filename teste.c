@@ -39,6 +39,5 @@ ssize_t readln(int fd, char* line, size_t size){
 int main(int argc, char** argv){
 
   char* s = "ola\n";
-  printf("%ld\n",strlen(s));
   return 0;
 }

@@ -32,6 +32,7 @@ void sign_Int_handler(){
   close(fd_sc);
   if(fork() == 0){
     execlp("rm","rm","pipe_task_done",NULL);
+		_exit(0);
   }
   if(fork() == 0){
     execlp("rm","rm","fifo_cs",NULL);
@@ -75,7 +76,8 @@ void sigusr1SignalHandler(int signum){
   if (tasks[t]){
     tasks[t] -> status = 2;
     char *string = calloc(20,sizeof(char));
-
+		printf("oiii\n");
+		printf("%s\n",string);
 		if(!fork()){
 			execlp("rm","rm",string,NULL);
 			_exit(0);
@@ -90,7 +92,7 @@ void sigusr1SignalHandler(int signum){
 void printOutput(int task){
   // invalid task or concluded
   if(task < 0 || !tasks[task] || tasks[task] -> status != 2){
-    write(fd_write_sc, "Invalid Task\n",14);
+    write(fd_write_sc, "Invalid Task\n",13);
   }
 }
 
@@ -112,7 +114,7 @@ void realloc_task(){
 }
 
 void init_task(){
-	write(1,"task iniciada\n",14);
+	write(1,"Task iniciada\n",14);
 	child_pids = calloc(size_max,sizeof(int*));
   tasks = calloc(size_max,sizeof(tasks));
   for(int i = 0;i<size_max;i++)
@@ -168,15 +170,15 @@ void executingTasks(){
 }
 
 void info(){
-	write(fd_write_sc,"./sdstore status\n",18);
-	write(fd_write_sc,"./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2 ...\n",105);
+	write(fd_write_sc,"./sdstore status\n",17);
+	write(fd_write_sc,"./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2 ...\n",104);
 }
 
 char* read_bytes(char* file){
 
 	char* buffer = malloc(sizeof(char));
 
-	int fd = open("samples/file-a2",O_RDONLY);
+	int fd = open(file,O_RDONLY);
 
 	ssize_t bytes_read = 0;
 	int c = 0;
@@ -193,7 +195,7 @@ char* read_bytes(char* file){
 }
 
 void process(char* input, char* output, char** transformations,int numT){
-	write(fd_write_sc,"processing\n",12);
+	write(fd_write_sc,"processing\n",11);
 
 	int pid[numT], status[numT];
 	int filds[2];
@@ -206,14 +208,17 @@ void process(char* input, char* output, char** transformations,int numT){
 	int fdin = dup(0);
   int fdout = dup(1);
 
-	int fd_in = open(input,O_RDONLY);
-	int fd_out = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
+	//int fd_in = open(input,O_RDONLY);
+	//int fd_out = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
 
-	dup2(fd_in,0); // read
-	dup2(fd_out,1); //write
+	filds[0] = open(input,O_RDONLY);
+	filds[1] = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
 
-	close(fd_in);
-	close(fd_out);
+	dup2(filds[0],0); // read
+	dup2(filds[1],1); //write
+
+	//close(fd_in);
+	//close(fd_out);
 
 	for(int i = 0; i < numT; i++){
 		char* aux = malloc(sizeof(char));
@@ -222,6 +227,8 @@ void process(char* input, char* output, char** transformations,int numT){
 		strcat(aux,transformations[i]);
 		if(fork() == 0){
 			if(i== 0 && i == numT-1){
+				close(filds[0]);
+				close(filds[1]);
 				execl(aux,transformations[i],NULL);
 		    _exit(pid[i]);
 			}else if(i == 0){ // produtor
@@ -254,7 +261,7 @@ void process(char* input, char* output, char** transformations,int numT){
 				printf("\nfilho terminou com %d\n", WEXITSTATUS(status[i]));
 			}
 		}
-		//free(aux);
+		free(aux);
 	}
 
 	//(bytes-input: 1024, bytes-output: 2048)
@@ -268,7 +275,6 @@ void process(char* input, char* output, char** transformations,int numT){
 	strcat(msg,b);
 	free(b);
 	strcat(msg,")\n");
-	write(1,msg,strlen(msg));
 
 	write(fd_write_sc,msg,strlen(msg));
 	write(fd_write_sc,EXIT,sizeOfExit);
@@ -347,7 +353,7 @@ int read_conf(int fd_config){
 		}else if(strcmp(string,"decrypt")== 0){
 			max_inst[6] = atoi(strtok(NULL," "));
 		}else{
-			write(1,"[1]Ficheiro de configuração incorreto\n",40);
+			write(1,"[1]Ficheiro de configuracao incorreto\n",38);
 			return -1;
 		}
 	}
@@ -355,7 +361,7 @@ int read_conf(int fd_config){
 	bzero(buf,15);
 
 	if(c!=7){
-		write(1,"[2]Ficheiro de configuração incorreto\n",40);
+		write(1,"[2]Ficheiro de configuracao incorreto\n",38);
 		return -1;
 	}
 
@@ -377,7 +383,7 @@ int main(int argc, char** argv){
 	path = argv[2];
 
 	if(argc < 3){
-		write(1,"[Wrong number of arguments]: The program must receive 2 arguments\n",67);
+		write(1,"[Wrong number of arguments]: The program must receive 2 arguments\n",66);
 		return -1;
 	}
 

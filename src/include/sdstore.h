@@ -10,7 +10,7 @@
 #include <signal.h>
 #include "readln.h"
 
-#define EXIT "//exit"
-#define sizeOfExit 6
+#define EXIT "exit"
+#define sizeOfExit 4
 #define BUFF_SIZE 4096
 #define MAX_LINE_SIZE 256
