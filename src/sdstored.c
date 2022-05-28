@@ -7,7 +7,7 @@ typedef struct struct_task{
 	int status;
 }*Task;
 
-int fd_read_server, fd_write_sc,fd_read_cs;
+int fd_read_server;
 int **child_pids;
 int size_max = 5;
 int max_inst[7];
@@ -99,7 +99,7 @@ void realloc_task(){
   size_max = 2*size_max;
 }
 
-void transfState(char transf[11], int i){
+void transfState(char transf[11], int i,int fd_write_sc){
 	char msg[35] = "transf ";
 	strcat(msg,transf);
 	strcat(msg, " ");
@@ -115,7 +115,7 @@ void transfState(char transf[11], int i){
 	write(fd_write_sc,msg,strlen(msg));
 }
 
-void executingTasks(){
+void executingTasks(int fd_write_sc){
 	char aux[MAX_LINE_SIZE];
 	int i;
 	if(cur_task == 0){
@@ -131,16 +131,16 @@ void executingTasks(){
 		}
 	}
 
-	transfState("nop",0);
-	transfState("bcompress",1);
-	transfState("bdecompress",2);
-	transfState("gcompress",3);
-	transfState("gdecompress",4);
-	transfState("encrypt",5);
-	transfState("decrypt",6);
+	transfState("nop",0,fd_write_sc);
+	transfState("bcompress",1,fd_write_sc);
+	transfState("bdecompress",2,fd_write_sc);
+	transfState("gcompress",3,fd_write_sc);
+	transfState("gdecompress",4,fd_write_sc);
+	transfState("encrypt",5,fd_write_sc);
+	transfState("decrypt",6,fd_write_sc);
 
 	write(fd_write_sc,EXIT,strlen(EXIT));
-
+	close(fd_write_sc);
 }
 
 char* read_bytes(char* file){
@@ -163,7 +163,7 @@ char* read_bytes(char* file){
 	return str;
 }
 
-void process(char* input, char* output, char** transformations,int numT){
+void process(char* input, char* output, char** transformations,int numT,int fd_write_sc){
 	len = strlen("processing\n");
 	write(fd_write_sc,"processing\n",len);
 
@@ -243,12 +243,11 @@ void process(char* input, char* output, char** transformations,int numT){
 
 	write(fd_write_sc,msg,strlen(msg));
 	write(fd_write_sc,EXIT,strlen(EXIT));
-
+	close(fd_write_sc);
 }
 
-void interpreter(char* line){
+void interpreter(char* line,int fd_write_sc){
 	int pid, status;
-	printf("FODASSSe");
 
 	char string[strlen(line)];
 	strcpy(string,line);
@@ -260,7 +259,7 @@ void interpreter(char* line){
 			len = strlen("./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2...\n");
 			write(fd_write_sc,"./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2...\n",len);
 			write(fd_write_sc,EXIT,strlen(EXIT));
-
+			close(fd_write_sc);
 		}else{
 			pid_t pid_filho = wait(&status);
 			if (WIFEXITED(status)) {
@@ -290,7 +289,7 @@ void interpreter(char* line){
 				strcpy(transformations[t],aux);
 			}
 			//sleep(10);
-			process(file,outputFolder,transformations,t);
+			process(file,outputFolder,transformations,t,fd_write_sc);
 			printf("FODASSSe");
 			kill(getppid(),SIGUSR1);
 			_exit(pid);
@@ -316,7 +315,7 @@ void interpreter(char* line){
 		len = strlen("Unkown operator\n");
 		write(fd_write_sc,"Unkown operator\n",len);
 		write(fd_write_sc,EXIT,strlen(EXIT));
-
+		close(fd_write_sc);
 	}
 }
 
@@ -356,7 +355,24 @@ int read_conf(int fd_config){
 	return 0;
 }
 
+void open_fifo_client(char* pid_client){
+	int fd_read_cs, fd_write_sc;
+	char* buf = malloc(MAX_LINE_SIZE*sizeof(char*));;
 
+	if((fd_read_cs = open(pid_client,O_RDONLY)) == -1){
+		perror("open");
+		return;
+	}else printf("[DEBUG] opened fifo %s for [reading]\n",pid_client);
+
+	if((fd_write_sc = open(pid_client,O_WRONLY)) == -1){
+		perror("open");
+		return;
+	}else printf("[DEBUG] opened fifo %s for [writing]\n",pid_client);
+
+	read(fd_read_cs,buf,MAX_LINE_SIZE);
+	close(fd_read_cs);
+	interpreter(buf,fd_write_sc);
+}
 
 int main(int argc, char** argv){
 
@@ -395,6 +411,12 @@ int main(int argc, char** argv){
 
 	while(1){
 		if(read(fd_read_server,buf,MAX_LINE_SIZE) > 0)
+			open_fifo_client(buf);
+	  bzero(buf, MAX_LINE_SIZE * sizeof(char));
+	}
+
+	/*while(1){
+		if(read(fd_read_server,buf,MAX_LINE_SIZE) > 0)
 		{
 			if(fork() == 0){
 				if((fd_read_cs = open(buf,O_RDONLY)) == -1){
@@ -412,12 +434,13 @@ int main(int argc, char** argv){
 				read(fd_read_cs,buf,MAX_LINE_SIZE);
 				close(fd_read_cs);
 				interpreter(buf);
+
 				close(fd_write_sc);
 				_exit(0);
 			}
 		  bzero(buf, MAX_LINE_SIZE * sizeof(char));
 		}
-	}
+	}*/
 	execlp("rm","rm","fifo_server",NULL);
 	close(fd_read_server);
 	return 0;
