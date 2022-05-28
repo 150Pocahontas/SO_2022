@@ -13,9 +13,8 @@ int main(int argc, char** argv){
     if((fd_write_server= open("fifo_server",O_WRONLY)) == -1){
       perror("open");
       return -1;
-    }else printf("[DEBUG] opened fifo Server for [writing]\n");
+    }//else printf("[DEBUG] opened fifo Server for [writing]\n");
 
-    write(fd_write_server,"ola",strlen("ola"));
     char* pid_str = malloc(sizeof(char));
     sprintf(pid_str,"%d",getpid());
 
@@ -23,7 +22,6 @@ int main(int argc, char** argv){
   		perror("mkfifo");
   	}
 
-    printf("%s\n",pid_str);
     write(fd_write_server,pid_str,strlen(pid_str));
     close(fd_write_server);
 
@@ -31,7 +29,7 @@ int main(int argc, char** argv){
     if((fd_write_cs = open(pid_str,O_WRONLY)) == -1){
       perror("open");
       return -1;
-    }else	printf("[DEBUG] opened fifo %s for [writing]\n",buf);
+    }//else	printf("[DEBUG] opened fifo %s for [writing]\n",buf);
 
     free(pid_str);
 
@@ -57,11 +55,11 @@ int main(int argc, char** argv){
     if((fd_read_sc = open(pid_str,O_RDONLY)) == -1){
       perror("open");
       return -1;
-    }else printf("[DEBUG] opened fifo %s for [reading]\n",buf);
+    }//else printf("[DEBUG] opened fifo %s for [reading]\n",buf);
 
     while((res = readln(fd_read_sc,buf,MAX_LINE_SIZE)) > 0){
       if(strcmp(buf,EXIT) == 0) {
-        if(argc > 2) if(read(fd_read_sc,buf,MAX_LINE_SIZE));
+        //if(argc > 2) if(read(fd_read_sc,buf,MAX_LINE_SIZE));
         close(fd_read_sc);
         execlp("rm","rm",pid_str,NULL);
         return 1;

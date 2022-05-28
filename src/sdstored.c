@@ -7,7 +7,7 @@ typedef struct struct_task{
 	int status;
 }*Task;
 
-int fd_read_server, fd_read_cs, fd_write_sc;
+int fd_read_server, fd_write_sc,fd_read_cs;
 int **child_pids;
 int size_max = 5;
 int max_inst[7];
@@ -37,6 +37,7 @@ void sign_Int_handler(){
   for(int i = 0; i<3;i++){
     wait(0);
   }
+
   for(int i = 0; i<size_max;i++){
     //printf("pid:    %d\n",tasks[i]->pidT );
     //printf("status: %d\n",tasks[i]->status);
@@ -51,31 +52,27 @@ void sign_Int_handler(){
 }
 
 void sigusr1SignalHandler(int signum){
-  int fd_fifo, res = 0;
+  //int fd_fifo, res = 0;
   char buffer[MAX_LINE_SIZE];
 
-  if((fd_fifo = open("pipe_task_done",O_RDONLY)) == -1)
-    perror("open-2");
-
-  res = read(fd_fifo,buffer,MAX_LINE_SIZE);
-  buffer[res] = '\0';
-  close(fd_fifo);
+  //res = read(fd_fifo,buffer,MAX_LINE_SIZE);
+  //buffer[res] = '\0';
+  //close(fd_fifo);
 
   int t = atoi(buffer);
 
   if (tasks[t]){
     tasks[t] -> status = 2;
-    char *string = calloc(20,sizeof(char));
+    /*char *string = calloc(20,sizeof(char));
 		printf("%s\n",string);
 		if(!fork()){
 			execlp("rm","rm",string,NULL);
 			_exit(0);
 		}
-		free(string);
+		free(string);*/
 	}else {
 		printf("[DEBUG] shouldn´t come in here\n");
 	}
-	write(fd_write_sc,EXIT,strlen(EXIT));
 }
 
 void killProcessUSR1_handler(int signum){
@@ -100,36 +97,6 @@ void realloc_task(){
   for(int i = size_max;i<2*size_max;i++)
     tasks[i]  = calloc(1,sizeof(struct struct_task));
   size_max = 2*size_max;
-}
-
-void task_ended(){
-  int fd_fifo;
-  int res;
-
-  char buf[MAX_LINE_SIZE];
-
-  while((fd_fifo = open("pipe_task_done",O_WRONLY)) == -1);
-
-  res = sprintf(buf,"%d",cur_task);
-  write(fd_fifo,buf,res);
-  close(fd_fifo);
-}
-
-int end_task(int task){
-  if (task <= 0 || !tasks[task-1] || tasks[task-1]->status != 1){
-    write(fd_write_sc,"Invalid Task\n", 14);
-    return 0;
-  }
-
-  int pid = tasks[task-1]->pidT;
-  int status;
-  kill(pid,SIGUSR1);
-  waitpid(pid,&status,0);
-  if (WIFEXITED(status))
-    printf("Task finished with exit status %d\n",WEXITSTATUS(status));
-  tasks[task-1]->status = 5; //killed
-
-  return 1;
 }
 
 void transfState(char transf[11], int i){
@@ -173,6 +140,7 @@ void executingTasks(){
 	transfState("decrypt",6);
 
 	write(fd_write_sc,EXIT,strlen(EXIT));
+
 }
 
 char* read_bytes(char* file){
@@ -199,6 +167,7 @@ void process(char* input, char* output, char** transformations,int numT){
 	len = strlen("processing\n");
 	write(fd_write_sc,"processing\n",len);
 
+	printf("FODASSSe");
 	int pid[numT], status[numT];
 	int filds[2];
 
@@ -210,17 +179,11 @@ void process(char* input, char* output, char** transformations,int numT){
 	int fdin = dup(0);
   int fdout = dup(1);
 
-	//int fd_in = open(input,O_RDONLY);
-	//int fd_out = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
-
 	filds[0] = open(input,O_RDONLY);
 	filds[1] = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
 
 	dup2(filds[0],0); // read
 	dup2(filds[1],1); //write
-
-	//close(fd_in);
-	//close(fd_out);
 
 	for(int i = 0; i < numT; i++){
 		char* aux = malloc(sizeof(char));
@@ -280,11 +243,12 @@ void process(char* input, char* output, char** transformations,int numT){
 
 	write(fd_write_sc,msg,strlen(msg));
 	write(fd_write_sc,EXIT,strlen(EXIT));
+
 }
 
 void interpreter(char* line){
-	printf("%s\n",line );
 	int pid, status;
+	printf("FODASSSe");
 
 	char string[strlen(line)];
 	strcpy(string,line);
@@ -296,6 +260,7 @@ void interpreter(char* line){
 			len = strlen("./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2...\n");
 			write(fd_write_sc,"./sdstore proc-file priority input-filename output-filename transformation-id-1 transformation-id-2...\n",len);
 			write(fd_write_sc,EXIT,strlen(EXIT));
+
 		}else{
 			pid_t pid_filho = wait(&status);
 			if (WIFEXITED(status)) {
@@ -304,7 +269,7 @@ void interpreter(char* line){
 		}
 	}else	if(strcmp(line,"status") == 0){
 		if((pid = fork())==0){
-			executingTasks();
+			executingTasks(fd_write_sc);
 		}else{
 			pid_t pid_filho = wait(&status);
 			if (WIFEXITED(status)) {
@@ -324,13 +289,12 @@ void interpreter(char* line){
 				transformations[t] = malloc(sizeof(char));
 				strcpy(transformations[t],aux);
 			}
-			sleep(10);
+			//sleep(10);
 			process(file,outputFolder,transformations,t);
+			printf("FODASSSe");
 			kill(getppid(),SIGUSR1);
-			task_ended();
 			_exit(pid);
 		}else{
-			printf("New Task\n");
 			if(tasks[cur_task]){
 				tasks[cur_task]->pidT = pid;
 				tasks[cur_task]->status = 1; // runing
@@ -352,6 +316,7 @@ void interpreter(char* line){
 		len = strlen("Unkown operator\n");
 		write(fd_write_sc,"Unkown operator\n",len);
 		write(fd_write_sc,EXIT,strlen(EXIT));
+
 	}
 }
 
@@ -388,9 +353,10 @@ int read_conf(int fd_config){
 		write(1,"[2]Ficheiro de configuracao incorreto\n",38);
 		return -1;
 	}
-
 	return 0;
 }
+
+
 
 int main(int argc, char** argv){
 
@@ -398,8 +364,7 @@ int main(int argc, char** argv){
 	signal(SIGINT,sign_Int_handler);
 
 	char* buf = malloc(MAX_LINE_SIZE*sizeof(char*));
-	int bread, status;
-	int fd_config;
+	int fd_config, bread = 0;
 	path = argv[2];
 
 	if(argc < 3){
@@ -428,35 +393,32 @@ int main(int argc, char** argv){
 		return -1;
 	}else	printf("[DEBUG] opened fifo Server for [reading]\n");
 
-	while((bread = read(fd_read_cs,buf,MAX_LINE_SIZE)) > 0){
-		printf("ola\n");printf("%s\n",buf );
-		if(fork() == 0){
+	while(1){
+		if(read(fd_read_server,buf,MAX_LINE_SIZE) > 0)
+		{
+			if(fork() == 0){
+				if((fd_read_cs = open(buf,O_RDONLY)) == -1){
+		      perror("open");
+		      return -1;
+		    }else printf("[DEBUG] opened fifo %s for [reading]\n",buf);
 
-			if((fd_read_cs = open(buf,O_RDONLY)) == -1){
-	      perror("open");
-	      return -1;
-	    }else printf("[DEBUG] opened fifo %s for [reading]\n",buf);
+				if((fd_write_sc = open(buf,O_WRONLY)) == -1){
+					perror("open");
+					return -1;
+				}else printf("[DEBUG] opened fifo %s for [writing]\n",buf);
 
-			if((fd_write_sc = open(buf,O_WRONLY)) == -1){
-	      perror("open");
-	      return -1;
-	    }else printf("[DEBUG] opened fifo %s for [writing]\n",buf);
+				bzero(buf, MAX_LINE_SIZE * sizeof(char));
 
-			bzero(buf, MAX_LINE_SIZE * sizeof(char));
-
-			while((bread = read(fd_read_cs,buf,MAX_LINE_SIZE)) > 0)
+				read(fd_read_cs,buf,MAX_LINE_SIZE);
+				close(fd_read_cs);
 				interpreter(buf);
-
-			close(fd_read_cs);
-			close(fd_write_sc);
-			_exit(0);
-		}else{
-			pid_t pid_filho = wait(&status);
-			if (WIFEXITED(status))
-				printf("[PAI]: filho %d terminou com %d\n",pid_filho, WEXITSTATUS(status));
+				close(fd_write_sc);
+				_exit(0);
+			}
+		  bzero(buf, MAX_LINE_SIZE * sizeof(char));
 		}
-	  bzero(buf, MAX_LINE_SIZE * sizeof(char));
 	}
+	execlp("rm","rm","fifo_server",NULL);
 	close(fd_read_server);
 	return 0;
 }

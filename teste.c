@@ -36,11 +36,19 @@ ssize_t readln(int fd, char* line, size_t size){
   return counter;
 }
 
+int a = 0;
+int *i = &a;
+
 int main(int argc, char** argv){
-  printf("\npid filho %d\n", getpid());
-  char* str = malloc(sizeof(char));
-  sprintf(str,"%d",getpid());
-  write(1,str,strlen(str));
-  printf("\n");
+  int status;
+  if(fork()==0){
+    i++;
+    _exit(0);
+  }else{
+    wait(&status);
+    printf("%d\n",a);
+  }
+
+
   return 0;
 }

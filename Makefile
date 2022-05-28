@@ -39,4 +39,3 @@ move:
 clean:
 	rm -R obj bin
 	make clean -C SDStore-transf
-	rm fifo_cs fifo_sc pipe_task_done
