@@ -38,15 +38,17 @@ int main(int argc, char** argv){
     }else if(argc == 2){
       write(fd_write_cs,argv[1],strlen(argv[1]));
     }else if(argc > 2){
+      char* str = malloc(MAX_LINE_SIZE*sizeof(char*));
       for (int i = 1; i<argc;i++){
-        write(fd_write_cs,argv[i],strlen(argv[i]));
-        write(fd_write_cs," ",strlen(" "));
+        strcat(str,argv[i]);
+        strcat(str," ");
       }
+      write(fd_write_cs,str,strlen(str));
     }
     close(fd_write_cs);
     _exit(0);
   }else{
-
+    sleep(5);
     pid_t terminated_pid = wait(&status);
 
     char* pid_str = malloc(sizeof(char));

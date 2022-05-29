@@ -143,9 +143,9 @@ void executingTasks(int fd_write_sc){
 	close(fd_write_sc);
 }
 
-char* read_bytes(char* file){
+int read_bytes(char* file){
 
-	char* buffer = malloc(sizeof(char));
+	char* buffer = malloc(sizeof(char*));
 
 	int fd = open(file,O_RDONLY);
 
@@ -157,17 +157,13 @@ char* read_bytes(char* file){
 
   free(buffer);
 
-	char* str = malloc(sizeof(char));
-	sprintf(str,"%d", c);
-
-	return str;
+	return c;
 }
 
 void process(char* input, char* output, char** transformations,int numT,int fd_write_sc){
 	len = strlen("processing\n");
 	write(fd_write_sc,"processing\n",len);
 
-	printf("FODASSSe");
 	int pid[numT], status[numT];
 	int filds[2];
 
@@ -177,38 +173,35 @@ void process(char* input, char* output, char** transformations,int numT,int fd_w
 	}
 
 	int fdin = dup(0);
-  int fdout = dup(1);
+  int fdout = dup(1);  
 
 	filds[0] = open(input,O_RDONLY);
 	filds[1] = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
 
-	dup2(filds[0],0); // read
-	dup2(filds[1],1); //write
 
 	for(int i = 0; i < numT; i++){
-		char* aux = malloc(sizeof(char));
+		char* aux = malloc(sizeof(char*));
 		strcpy(aux,path);
 		if(aux[strlen(aux)-1]!= '/') strcat(aux,"/");
 		strcat(aux,transformations[i]);
 		if(fork() == 0){
-			if(i== 0 && i == numT-1){
+			if(i== 0 && i == numT-1){ //Apenas uma transformação
 				close(filds[0]);
 				close(filds[1]);
 				execl(aux,transformations[i],NULL);
 		    _exit(pid[i]);
-			}else if(i == 0){ // produtor
+			}else if(i == 0){ // produtor -> primeira transformação 
 				close(filds[0]);
 				dup2(filds[1],1);
 		    close(filds[1]);
 		    execl(aux,transformations[i],NULL);
 		    _exit(pid[i]);
-			}else if(i == numT-1)  { //consumidor
-				close(filds[1]);
+			}else if(i == numT-1)  { //consumidor -> última transformação
 		    dup2(filds[0],0);
 		    close(filds[0]);
 		    execl(aux,transformations[i],NULL);
 		    _exit(pid[i]);
-			}else{ //consumidor e depois produtor
+			}else{ //consumidor e depois produtor -> transformações do meio,
 		    dup2(filds[0],0);
 		    close(filds[0]);
 				dup2(filds[1],1);
@@ -217,11 +210,11 @@ void process(char* input, char* output, char** transformations,int numT,int fd_w
 		    _exit(pid[i]);
 			}
 		}else{
+			wait(&status[i]);
 			if (i != numT - 1) close(filds[1]);
 			if(i != 0 ) close(filds[0]);
 			dup2(fdout,0);
 		  dup2(fdin,1);
-			wait(&status[i]);
 			if (WIFEXITED(status[i])) {
 				printf("\nfilho terminou com %d\n", WEXITSTATUS(status[i]));
 			}
@@ -231,14 +224,19 @@ void process(char* input, char* output, char** transformations,int numT,int fd_w
 
 	//(bytes-input: 1024, bytes-output: 2048)
 	char msg[60] = "concluded (bytes-input: ";
-	char* b = malloc(sizeof(char));
-	b = read_bytes(input);
-	strcat(msg,b);
-	free(b);
+	//char* b = malloc(sizeof(char));
+	//b = read_bytes(input);
+	int c = read_bytes(input);
+	char size_str[10];
+	sprintf(size_str,"%d", c);
+	strcat(msg,size_str);
+	//free(b);
 	strcat(msg,", bytes-output: ");
-	b = read_bytes(output);
-	strcat(msg,b);
-	free(b);
+	c = read_bytes(output);
+	sprintf(size_str,"%d", c);
+	//b = read_bytes(output);
+	strcat(msg,size_str);
+	//free(b);
 	strcat(msg,")\n");
 
 	write(fd_write_sc,msg,strlen(msg));
@@ -252,6 +250,7 @@ void interpreter(char* line,int fd_write_sc){
 	char string[strlen(line)];
 	strcpy(string,line);
  	strtok(line," ");
+
 	if(strcmp(line,"info") == 0){
 		if((pid = fork())==0){
 			len = strlen("./sdstore status\n");
@@ -285,12 +284,11 @@ void interpreter(char* line,int fd_write_sc){
 			int t;
 			char* aux = malloc(sizeof(char*));
 			for(t = 0; (aux = strtok(NULL," ")); t++){
-				transformations[t] = malloc(sizeof(char));
+				transformations[t] = malloc(sizeof(char*));
 				strcpy(transformations[t],aux);
 			}
 			//sleep(10);
 			process(file,outputFolder,transformations,t,fd_write_sc);
-			printf("FODASSSe");
 			kill(getppid(),SIGUSR1);
 			_exit(pid);
 		}else{
@@ -313,6 +311,7 @@ void interpreter(char* line,int fd_write_sc){
 		}
 	}else{
 		len = strlen("Unkown operator\n");
+		write(1,"Unkown operator\n",len);
 		write(fd_write_sc,"Unkown operator\n",len);
 		write(fd_write_sc,EXIT,strlen(EXIT));
 		close(fd_write_sc);
@@ -357,21 +356,26 @@ int read_conf(int fd_config){
 
 void open_fifo_client(char* pid_client){
 	int fd_read_cs, fd_write_sc;
-	char* buf = malloc(MAX_LINE_SIZE*sizeof(char*));;
+
+	char* buf = malloc(MAX_LINE_SIZE*sizeof(char*));
 
 	if((fd_read_cs = open(pid_client,O_RDONLY)) == -1){
 		perror("open");
 		return;
 	}else printf("[DEBUG] opened fifo %s for [reading]\n",pid_client);
 
+	//int bread = 0;
+	read(fd_read_cs,buf,MAX_LINE_SIZE);
+	printf("%s\n",buf);
+	close(fd_read_cs);
+
 	if((fd_write_sc = open(pid_client,O_WRONLY)) == -1){
 		perror("open");
 		return;
 	}else printf("[DEBUG] opened fifo %s for [writing]\n",pid_client);
-
-	read(fd_read_cs,buf,MAX_LINE_SIZE);
-	close(fd_read_cs);
+	
 	interpreter(buf,fd_write_sc);
+	free(buf);
 }
 
 int main(int argc, char** argv){
@@ -380,7 +384,7 @@ int main(int argc, char** argv){
 	signal(SIGINT,sign_Int_handler);
 
 	char* buf = malloc(MAX_LINE_SIZE*sizeof(char*));
-	int fd_config, bread = 0;
+	int fd_config;
 	path = argv[2];
 
 	if(argc < 3){
