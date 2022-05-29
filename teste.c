@@ -41,12 +41,41 @@ int *i = &a;
 
 int main(int argc, char** argv){
   int status;
-  if(fork()==0){
-    i++;
-    _exit(0);
+  if((pid[i] = fork()) == 0){
+    if(i== 0 && i == numT-1){ //Apenas uma transformação
+      close(filds[0]);
+      close(filds[1]);
+      execl(aux,transformations[i],NULL);
+      _exit(pid[i]);
+    }else if(i == 0){ // produtor -> primeira transformação
+      close(filds[0]);
+      dup2(filds[1],1);
+      close(filds[1]);
+      execl(aux,transformations[i],NULL);
+      _exit(pid[i]);
+    }else if(i == numT-1){ //consumidor -> última transformação
+      close(filds[1]);
+      dup2(filds[0],0);
+      close(filds[0]);
+      execl(aux,transformations[i],NULL);
+      _exit(pid[i]);
+    }else{ //consumidor e depois produtor -> transformações do meio,
+      dup2(filds[0],0);
+      close(filds[0]);
+      dup2(filds[1],1);
+      close(filds[1]);
+      execl(aux,transformations[i],NULL);
+      _exit(pid[i]);
+    }
   }else{
-    wait(&status);
-    printf("%d\n",a);
+    wait(&status[i]);
+    if (i != numT - 1) close(filds[1]);
+    if(i != 0 ) close(filds[0]);
+    dup2(fdout,0);
+    dup2(fdin,1);
+    if (WIFEXITED(status[i])) {
+      printf("\nfilho terminou com %d\n", WEXITSTATUS(status[i]));
+    }
   }
 
 

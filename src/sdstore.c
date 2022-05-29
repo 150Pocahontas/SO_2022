@@ -48,7 +48,6 @@ int main(int argc, char** argv){
     close(fd_write_cs);
     _exit(0);
   }else{
-    sleep(5);
     pid_t terminated_pid = wait(&status);
 
     char* pid_str = malloc(sizeof(char));

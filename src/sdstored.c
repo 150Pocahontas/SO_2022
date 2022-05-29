@@ -38,50 +38,27 @@ void sign_Int_handler(){
     wait(0);
   }
 
-  for(int i = 0; i<size_max;i++){
-    //printf("pid:    %d\n",tasks[i]->pidT );
-    //printf("status: %d\n",tasks[i]->status);
-    //printf("task: %s\n",tasks[i]->task);
+  for(int i = 0; i<size_max; i++){
     if(tasks[i]->task) free(tasks[i]->task);
     free(tasks[i]);
     free(child_pids[i]);
   }
+
   free(tasks);
   free(child_pids);
   _exit(0);
 }
 
 void sigusr1SignalHandler(int signum){
-  //int fd_fifo, res = 0;
   char buffer[MAX_LINE_SIZE];
-
-  //res = read(fd_fifo,buffer,MAX_LINE_SIZE);
-  //buffer[res] = '\0';
-  //close(fd_fifo);
 
   int t = atoi(buffer);
 
-  if (tasks[t]){
+  if(tasks[t]){
     tasks[t] -> status = 2;
-    /*char *string = calloc(20,sizeof(char));
-		printf("%s\n",string);
-		if(!fork()){
-			execlp("rm","rm",string,NULL);
-			_exit(0);
-		}
-		free(string);*/
 	}else {
 		printf("[DEBUG] shouldn´t come in here\n");
 	}
-}
-
-void killProcessUSR1_handler(int signum){
-	int i = 0;
-	while(child_pids[cur_task][i]){
-		kill(child_pids[cur_task][i++],SIGKILL);
-	}
-	free(child_pids[cur_task]);
-	_exit(0);
 }
 
 void init_task(){
@@ -173,30 +150,32 @@ void process(char* input, char* output, char** transformations,int numT,int fd_w
 	}
 
 	int fdin = dup(0);
-  int fdout = dup(1);  
+  int fdout = dup(1);
 
-	filds[0] = open(input,O_RDONLY);
-	filds[1] = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
-
+	int fd_in = open(input,O_RDONLY);
+	int fd_out = open(output,O_CREAT | O_TRUNC | O_WRONLY,0666);
 
 	for(int i = 0; i < numT; i++){
 		char* aux = malloc(sizeof(char*));
 		strcpy(aux,path);
 		if(aux[strlen(aux)-1]!= '/') strcat(aux,"/");
 		strcat(aux,transformations[i]);
-		if(fork() == 0){
+		if((pid[i] = fork()) == 0){
+			dup2(fd_in,0); // read
+			dup2(fd_out,1); //write
+			close(fd_in);
+			close(fd_out);
 			if(i== 0 && i == numT-1){ //Apenas uma transformação
-				close(filds[0]);
-				close(filds[1]);
 				execl(aux,transformations[i],NULL);
 		    _exit(pid[i]);
-			}else if(i == 0){ // produtor -> primeira transformação 
+			}else if(i == 0){ // produtor -> primeira transformação
 				close(filds[0]);
 				dup2(filds[1],1);
 		    close(filds[1]);
 		    execl(aux,transformations[i],NULL);
 		    _exit(pid[i]);
-			}else if(i == numT-1)  { //consumidor -> última transformação
+			}else if(i == numT-1){ //consumidor -> última transformação
+				close(filds[1]);
 		    dup2(filds[0],0);
 		    close(filds[0]);
 		    execl(aux,transformations[i],NULL);
@@ -222,21 +201,15 @@ void process(char* input, char* output, char** transformations,int numT,int fd_w
 		free(aux);
 	}
 
-	//(bytes-input: 1024, bytes-output: 2048)
 	char msg[60] = "concluded (bytes-input: ";
-	//char* b = malloc(sizeof(char));
-	//b = read_bytes(input);
 	int c = read_bytes(input);
 	char size_str[10];
 	sprintf(size_str,"%d", c);
 	strcat(msg,size_str);
-	//free(b);
 	strcat(msg,", bytes-output: ");
 	c = read_bytes(output);
 	sprintf(size_str,"%d", c);
-	//b = read_bytes(output);
 	strcat(msg,size_str);
-	//free(b);
 	strcat(msg,")\n");
 
 	write(fd_write_sc,msg,strlen(msg));
@@ -287,7 +260,7 @@ void interpreter(char* line,int fd_write_sc){
 				transformations[t] = malloc(sizeof(char*));
 				strcpy(transformations[t],aux);
 			}
-			//sleep(10);
+			sleep(10);
 			process(file,outputFolder,transformations,t,fd_write_sc);
 			kill(getppid(),SIGUSR1);
 			_exit(pid);
@@ -373,7 +346,7 @@ void open_fifo_client(char* pid_client){
 		perror("open");
 		return;
 	}else printf("[DEBUG] opened fifo %s for [writing]\n",pid_client);
-	
+
 	interpreter(buf,fd_write_sc);
 	free(buf);
 }
