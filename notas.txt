@@ -1,2 +1,0 @@
-./bin/sdstore proc-file samples/file-a outputs/output
-./bin/sdstored etc/sdstored.conf bin/sdstore-transformations
